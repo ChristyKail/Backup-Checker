@@ -1,3 +1,5 @@
+
+import sys
 import os
 import re
 from time import time
@@ -21,7 +23,7 @@ class IndexChecker:
         self.missing_secondary = []
 
         self.mismatch_primary = []
-        self.missing_secondary = []
+        self.mismatch_secondary = []
 
         ######################################################################
         # get a list of MHLs in the root folder - these are the backup indexes
@@ -40,10 +42,12 @@ class IndexChecker:
         self.log(
             f'{len(self.backup_mhl_list_primary)} primary backups found: {", ".join([os.path.basename(f) for f in self.backup_mhl_list_primary])}',
             False)
+
         self.log(
             f'{len(self.backup_mhl_list_secondary)} secondary backups found: {", ".join([os.path.basename(f) for f in self.backup_mhl_list_secondary])}',
             False)
 
+        print()
         ########################################################################
         # get a list of MHLs in the media folders - these are the source indexes
         self.source_mhl_list = []
@@ -96,7 +100,6 @@ class IndexChecker:
         print()
 
     def check_indexes(self):
-
         """perform checks on the three dicts created in init"""
 
         # check the source against the primary, if available
@@ -129,7 +132,6 @@ class IndexChecker:
             self.log("No secondary backups were checked")
 
     def log(self, string: str, fail=True):
-
         """saves a log entry"""
 
         if fail:
@@ -141,7 +143,6 @@ class IndexChecker:
             print(string)
 
     def write_report(self):
-
         """writes out a summary of the job to the root folder"""
 
         if self.failed_check:
@@ -226,10 +227,6 @@ class IndexChecker:
             for line in self.logger:
                 file_handler.write(line + "\n")
 
-        # if self.failed_check:
-        #     mac_colors.red(file_name)
-        # else:
-        #     mac_colors.green(file_name)
 
 
 class BColors:
@@ -322,10 +319,31 @@ def remove_xml_tag(string: str, tag_name: str):
 
 
 if __name__ == "__main__":
-    start_time = time()
 
-    folder_check = IndexChecker("/Users/christykail/Cinelab_dev/Safe-Deleter/TARTAN MHLs")
-    folder_check.check_indexes()
-    folder_check.write_report()
+    folders = sys.argv[1:]
 
-    print(f'Done in {time() - start_time}')
+    if len(folders) == 0:
+
+        folders = [input("Drop day folder here...")]
+
+    for folder in folders:
+
+        folder = folder.replace("\\", "").strip()
+
+        if not os.path.isdir(folder):
+            print(f'{folder} is not a valid folder')
+            continue
+
+        else:
+            try:
+                folder_checker = IndexChecker(folder)
+
+            except ValueError as error:
+
+                print(folder+str(error))
+                continue
+
+            folder_checker.check_indexes()
+            folder_checker.write_report()
+
+
