@@ -1,9 +1,7 @@
 import os
 import re
 from time import time
-
-import xmltodict
-import mac_colors
+from datetime import datetime
 
 
 class IndexChecker:
@@ -14,25 +12,42 @@ class IndexChecker:
         if folders_to_search is None:
             folders_to_search = ["Camera_Media", "Sound_Media"]
 
-        self.logger = ""
+        # set basic class variables
+        self.root_folder = root_folder
+        self.logger = []
         self.failed_check = False
 
-        # get a list of MHLs in the root folder - these are the backup indexes
-        backup_mhl_list = [os.path.join(root_folder, file) for file in os.listdir(root_folder) if
-                           is_file_an_index(file) == "mhl"]
+        self.missing_primary = []
+        self.missing_secondary = []
 
+        self.mismatch_primary = []
+        self.missing_secondary = []
+
+        ######################################################################
+        # get a list of MHLs in the root folder - these are the backup indexes
+        self.log(f"Checking folder {root_folder}", False)
+        backup_mhl_list = [os.path.join(root_folder, file) for file in os.listdir(root_folder) if
+                           file.endswith(".mhl")]
+        # if no backup MHLs found, raise an error
         if not backup_mhl_list:
-            print("No backup index was found")
-            return
+            self.log("No backup indexes were found")
+            raise ValueError("No backup indexes were found")
 
         # divide the MHLs into primary  and secondary backups
-        self.backup_mhl_list_primary = [f for f in backup_mhl_list if (int(f[-5]) % 2 != 0)]
-        self.backup_mhl_list_secondary = [f for f in backup_mhl_list if (int(f[-5]) % 2 == 0)]
+        self.backup_mhl_list_primary, self.backup_mhl_list_secondary = separate_primary_and_secondary(backup_mhl_list)
 
+        # log the source indexes
+        self.log(
+            f'{len(self.backup_mhl_list_primary)} primary backups found: {", ".join([os.path.basename(f) for f in self.backup_mhl_list_primary])}',
+            False)
+        self.log(
+            f'{len(self.backup_mhl_list_secondary)} secondary backups found: {", ".join([os.path.basename(f) for f in self.backup_mhl_list_secondary])}',
+            False)
+
+        ########################################################################
         # get a list of MHLs in the media folders - these are the source indexes
         self.source_mhl_list = []
         for folder_to_search in folders_to_search:
-
             for root, dirs, files in os.walk(os.path.join(root_folder, folder_to_search)):
                 for file in files:
                     if file.endswith(".mhl"):
@@ -41,69 +56,160 @@ class IndexChecker:
         # check we found some source indexes, otherwise return
         if self.source_mhl_list:
 
-            print(f"Source indexes - {len(self.source_mhl_list)}")
+            self.log(f'{len(self.source_mhl_list)} sources found', False)
             for mhl in self.source_mhl_list:
-                print(os.path.basename(mhl))
+                self.log(f'Source: {os.path.basename(mhl)}', False)
 
         else:
-            print("No source indexes were found")
-            return
+            self.log("No source indexes found")
+            raise ValueError("No source indexes found")
 
+        print()
+        ##################################################
         # make three dicts, primary, secondary, and source
         self.backup_dict_primary = {}
         for mhl in self.backup_mhl_list_primary:
             self.backup_dict_primary.update(mhl_to_dict_fast(mhl))
+        backup_primary_file_count = len(self.backup_dict_primary)
 
         self.backup_dict_secondary = {}
         for mhl in self.backup_mhl_list_secondary:
             self.backup_dict_secondary.update(mhl_to_dict_fast(mhl))
+        backup_secondary_file_count = len(self.backup_dict_secondary)
 
         self.source_dict = {}
         for mhl in self.source_mhl_list:
             self.source_dict.update(mhl_to_dict_fast(mhl))
+        source_file_count = len(self.source_dict)
 
-        self.add_to_log(f"Files in source: {len(self.source_dict)} - {len(self.source_dict)+len(self.source_mhl_list)} including MHLs!")
-        self.add_to_log(f"Files in primary backup: {len(self.backup_dict_primary)}")
-        self.add_to_log(f"Files in secondary backup: {len(self.backup_dict_secondary)}")
+        if len(self.source_dict) + len(self.source_mhl_list) > len(self.backup_dict_primary):
+            self.log("More files in source than primary backup!", True)
+
+        if len(self.source_dict) + len(self.source_mhl_list) > len(self.backup_dict_secondary):
+            self.log("More files in source than secondary backup!", True)
+
+        print()
+        self.log(f"Files in source: {source_file_count} - {source_file_count + len(self.source_mhl_list)} including "
+                 f"MHLs!", False)
+        self.log(f"Files in primary backup: {backup_primary_file_count}", False)
+        self.log(f"Files in secondary backup: {backup_secondary_file_count}", False)
+        print()
+
+    def check_indexes(self):
+
+        """perform checks on the three dicts created in init"""
 
         # check the source against the primary, if available
         if len(self.backup_dict_primary):
 
-            missing_primary, mismatch_primary = compare_dicts(self.backup_dict_primary, self.source_dict)
+            self.missing_primary, self.mismatch_primary = compare_dicts(self.backup_dict_primary, self.source_dict)
 
-            if missing_primary:
-                self.add_to_log("The following files are missing on primary backups:")
-                self.add_to_log("\n".join(missing_primary))
-            if mismatch_primary:
-                self.add_to_log("The following files have the wrong files size on primary backups:")
-                self.add_to_log("\n".join(mismatch_primary))
+            if self.missing_primary:
+                self.log("The following files are missing on primary backups:", True)
+                self.log("\n".join(self.missing_primary), True)
+            if self.mismatch_primary:
+                self.log("The following files have the wrong files size on primary backups:", True)
+                self.log("\n".join(self.mismatch_primary), True)
         else:
-            self.add_to_log("No primary backups were checked")
+            self.log("No primary backups were checked")
 
+        # check the source against the secondary, if available
         if len(self.backup_dict_secondary):
 
-            missing_secondary, mismatch_secondary = compare_dicts(self.backup_dict_secondary, self.source_dict)
+            self.missing_secondary, self.mismatch_secondary = compare_dicts(self.backup_dict_secondary,
+                                                                            self.source_dict)
 
-            if missing_secondary:
-                self.add_to_log("The following files are missing on secondary backups:")
-                self.add_to_log("\n".join(missing_secondary))
-            if mismatch_secondary:
-                self.add_to_log("The following files have the wrong files size on primary backups:")
-                self.add_to_log("\n".join(mismatch_secondary))
+            if self.missing_secondary:
+                self.log("The following files are missing on secondary backups:", True)
+                self.log("\n".join(self.missing_secondary), True)
+            if self.mismatch_secondary:
+                self.log("The following files have the wrong files size on primary backups:", True)
+                self.log("\n".join(self.mismatch_secondary), True)
         else:
-            self.add_to_log("No secondary backups were checked")
+            self.log("No secondary backups were checked")
 
-        self.write_out_log(root_folder)
+    def log(self, string: str, fail=True):
 
-    def add_to_log(self, string: str, fail=True):
+        """saves a log entry"""
 
         if fail:
             self.failed_check = True
+            self.logger.append(f'[FAIL] {string}')
+            print(BColors.FAIL + string + BColors.ENDC)
+        else:
+            self.logger.append(f'{string}')
+            print(string)
 
-        self.logger = self.logger + "\n" + string
-        print(string)
+    def write_report(self):
 
-    def write_out_log(self, directory):
+        """writes out a summary of the job to the root folder"""
+
+        if self.failed_check:
+            result = "failed"
+        else:
+            result = "passed"
+
+        report_name = f'{os.path.basename(self.root_folder)} - {result}.txt'
+
+        with open(os.path.join(self.root_folder, report_name), "w") as file_handler:
+
+            file_handler.write(f'{datetime.now()}\n')
+            file_handler.write("\n")
+
+            # list all the MHLs
+            file_handler.write(f'Primary Backups: {len(self.backup_mhl_list_primary)}\n')
+            for line in self.backup_mhl_list_primary:
+                file_handler.write(f"\t{os.path.basename(line)}\n")
+
+            file_handler.write(f'Secondary Backups: {len(self.backup_mhl_list_secondary)}\n')
+            for line in self.backup_mhl_list_secondary:
+                file_handler.write(f"\t{os.path.basename(line)}\n")
+
+            file_handler.write(f'Sources: {len(self.source_mhl_list)}\n')
+            for line in self.source_mhl_list:
+                file_handler.write(f"\t{os.path.basename(line)}\n")
+
+            file_handler.write("\n")
+
+            # count all the files
+            file_handler.write(f'Files in primary backup: {len(self.backup_dict_primary)}\n')
+            file_handler.write(f'Files in secondary backup: {len(self.backup_dict_secondary)}\n')
+            file_handler.write(f'Files in source: {len(self.source_dict)}\n')
+
+            file_handler.write("\n")
+
+            # list all the missing primary files
+            if len(self.backup_mhl_list_primary):
+
+                file_handler.write(f'Files missing from primary backup: {len(self.missing_primary)}\n')
+                for line in self.missing_primary:
+                    file_handler.write(f"\t{line}\n")
+
+                file_handler.write(f'Files with wrong file size on primary backup: {len(self.mismatch_primary)}\n')
+                for line in self.mismatch_primary:
+                    file_handler.write(f"\t{line}\n")
+
+            else:
+                file_handler.write(f"No primary backups checked\n")
+            file_handler.write("\n")
+
+            # list all the missing secondary files
+            if len(self.backup_mhl_list_secondary):
+                file_handler.write(f'Files missing from secondary backup: {len(self.missing_secondary)}\n')
+                for line in self.missing_secondary:
+                    file_handler.write(f"\t{line}\n")
+
+                file_handler.write(f'Files with wrong file size on secondary backup: {len(self.mismatch_secondary)}\n')
+                for line in self.mismatch_secondary:
+                    file_handler.write(f"\t{line}\n")
+            else:
+                file_handler.write(f"No secondary backups checked\n")
+            file_handler.write("\n")
+
+    def write_out_log(self, directory=""):
+
+        if not directory:
+            directory = self.root_folder
 
         backups_string = " ".join(
             os.path.basename(f)[:6] for f in self.backup_mhl_list_primary + self.backup_mhl_list_secondary)
@@ -117,12 +223,32 @@ class IndexChecker:
 
         with open(file_name, 'w') as file_handler:
 
-            file_handler.write(self.logger)
+            for line in self.logger:
+                file_handler.write(line + "\n")
 
-        if self.failed_check:
-            mac_colors.red(file_name)
-        else:
-            mac_colors.green(file_name)
+        # if self.failed_check:
+        #     mac_colors.red(file_name)
+        # else:
+        #     mac_colors.green(file_name)
+
+
+class BColors:
+    HEADER = '\033[95m'
+    OKBLUE = '\033[94m'
+    OKCYAN = '\033[96m'
+    OKGREEN = '\033[92m'
+    WARNING = '\033[93m'
+    FAIL = '\033[91m'
+    ENDC = '\033[0m'
+    BOLD = '\033[1m'
+    UNDERLINE = '\033[4m'
+
+
+def separate_primary_and_secondary(mhl_list):
+    primary = [f for f in mhl_list if (int(f[-5]) % 2 != 0)]
+    secondary = [f for f in mhl_list if (int(f[-5]) % 2 == 0)]
+
+    return primary, secondary
 
 
 def compare_dicts(backup_dict, source_dict):
@@ -140,98 +266,6 @@ def compare_dicts(backup_dict, source_dict):
     return missing, mismatch
 
 
-def extract_files_from_index(filename):
-    """returns a list of files from any index format"""
-
-    with open(filename, 'r') as file_handler:
-
-        # read every line of text into a string list
-        text_lines = file_handler.readlines()
-
-        #
-        if filename.lower().endswith('.mhl'):
-            file_list = [line.replace("<file>", "").replace(r"</file>", "").strip() for line in text_lines if
-                         line.strip().startswith("<file>")]
-
-        elif filename.lower().endswith('.md5'):
-            file_list = [line.split()[1] for line in text_lines if line.strip()]
-
-        elif filename.lower().endswith('.toc'):
-            file_list = [line for line in text_lines]
-
-        else:
-
-            print("Unknown index file format")
-            # raise ArgumentError("Unknown index file format")
-            return []
-
-    return file_list
-
-
-def is_file_an_index(file: str):
-    if file.lower().endswith(".mhl"):
-
-        index_type = "mhl"
-
-    elif file.lower().endswith(".md5"):
-
-        index_type = "md5"
-
-    elif file.lower().endswith(".toc"):
-
-        index_type = "toc"
-
-    else:
-
-        index_type = False
-
-    return index_type
-
-
-def mhl_to_dict(mhl_file_path: str):
-    dict_of_files_and_sizes = {}
-
-    with open(mhl_file_path, "r") as file_handler:
-        contents = file_handler.read()
-
-        xml = xmltodict.parse(contents)
-
-    if xml["hashlist"]["hash"][0]['file'].strip().startswith(r"/Volumes"):
-        remove_volume = True
-    else:
-        remove_volume = False
-
-    if xml["hashlist"]["creatorinfo"]["username"] != "YoYotta":
-        add_roll_to_path = os.path.basename(os.path.dirname(mhl_file_path))
-    else:
-        add_roll_to_path = False
-
-    for hash_item in xml["hashlist"]["hash"]:
-
-        file_path = hash_item["file"]
-
-        # remove volume information
-        if remove_volume:
-            elements = file_path.split(os.sep)
-            del elements[:3]
-            file_path = os.sep.join(elements)
-            file_path = os.path.sep + file_path
-        elif add_roll_to_path:
-            file_path = os.path.join(add_roll_to_path, file_path)
-            file_path = os.path.sep + file_path
-
-        # head trim the path down to below Camera_Media or Sound_Media
-
-        if "Camera_Media" in file_path:
-            file_path = file_path.split("Camera_Media")[1]
-        elif "Sound_Media" in file_path:
-            file_path = file_path.split("Sound_Media")[1]
-
-        dict_of_files_and_sizes[file_path] = hash_item["size"]
-
-    return dict_of_files_and_sizes
-
-
 def mhl_to_dict_fast(mhl_file_path: str):
     dict_of_files_and_sizes = {}
 
@@ -241,6 +275,7 @@ def mhl_to_dict_fast(mhl_file_path: str):
         contents = file_handler.readlines()
 
     add_roll_to_path = ""
+    volumes_string = ''
 
     for index, line in enumerate(contents):
 
@@ -270,6 +305,11 @@ def mhl_to_dict_fast(mhl_file_path: str):
                 file_path = file_path.split("Camera_Media")[1]
             elif "Sound_Media" in file_path:
                 file_path = file_path.split("Sound_Media")[1]
+            elif file_path.startswith("/Volumes/"):
+                if not volumes_string:
+                    volumes_string = re.findall(r'^/Volumes/\w+', file_path)[0]
+
+                file_path = file_path.replace(volumes_string, "", 1)
 
             # add this file to the dictionary
             dict_of_files_and_sizes[file_path] = file_size
@@ -282,14 +322,10 @@ def remove_xml_tag(string: str, tag_name: str):
 
 
 if __name__ == "__main__":
-
-    folder_input = ''
-    # folder_input = input("Drag root folder")
-    # folder_input = folder_input.replace("\ ", " ").strip()
-
-    if not folder_input:
-        folder_input = "/Users/christykail/Cinelab_dev/Safe-Deleter/TARTAN MHLs"
-
     start_time = time()
-    index_checker = IndexChecker(folder_input)
+
+    folder_check = IndexChecker("/Users/christykail/Cinelab_dev/Safe-Deleter/TARTAN MHLs")
+    folder_check.check_indexes()
+    folder_check.write_report()
+
     print(f'Done in {time() - start_time}')
