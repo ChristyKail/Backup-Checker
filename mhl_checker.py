@@ -52,10 +52,15 @@ class IndexChecker:
         # get a list of MHLs in the media folders - these are the source indexes
         self.source_mhl_list = []
         for folder_to_search in folders_to_search:
-            for root, dirs, files in os.walk(os.path.join(root_folder, folder_to_search)):
-                for file in files:
-                    if file.endswith(".mhl"):
-                        self.source_mhl_list.append(os.path.join(root, file))
+
+            if not os.path.exists(os.path.join(root_folder, folder_to_search)):
+                self.log(f'{folder_to_search} not found', False)
+
+            else:
+                for root, dirs, files in os.walk(os.path.join(root_folder, folder_to_search)):
+                    for file in files:
+                        if file.endswith(".mhl"):
+                            self.source_mhl_list.append(os.path.join(root, file))
 
         # check we found some source indexes, otherwise return
         if self.source_mhl_list:
