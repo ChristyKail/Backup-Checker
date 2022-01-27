@@ -1,20 +1,20 @@
-
 import sys
 import os
 import re
-from time import time
 from datetime import datetime
 
 
 class IndexChecker:
 
-    def __init__(self, root_folder: str, folders_to_search=None):
+    def __init__(self, root_folder: str, folders_to_search=None, manager=None):
 
         # assume we want to search Camera_Media and Sound_Media if it's not defined
         if folders_to_search is None:
             folders_to_search = ["Camera_Media", "Sound_Media"]
 
         # set basic class variables
+
+        self.manager = manager
         self.root_folder = root_folder
         self.logger = []
         self.failed_check = False
@@ -131,13 +131,20 @@ class IndexChecker:
         else:
             self.log("No secondary backups were checked")
 
+        self.log("All MHLs checked", False)
+
     def log(self, string: str, fail=True):
         """saves a log entry"""
+
+        if self.manager:
+            self.manager.log(string, fail)
+            self.manager.update()
 
         if fail:
             self.failed_check = True
             self.logger.append(f'[FAIL] {string}')
             print(BColors.FAIL + string + BColors.ENDC)
+
         else:
             self.logger.append(f'{string}')
             print(string)
@@ -207,6 +214,8 @@ class IndexChecker:
                 file_handler.write(f"No secondary backups checked\n")
             file_handler.write("\n")
 
+        self.log("Report saved to disk", False)
+
     def write_out_log(self, directory=""):
 
         if not directory:
@@ -226,7 +235,6 @@ class IndexChecker:
 
             for line in self.logger:
                 file_handler.write(line + "\n")
-
 
 
 class BColors:
@@ -323,7 +331,6 @@ if __name__ == "__main__":
     folders = sys.argv[1:]
 
     if len(folders) == 0:
-
         folders = [input("Drop day folder here...")]
 
     for folder in folders:
@@ -340,10 +347,8 @@ if __name__ == "__main__":
 
             except ValueError as error:
 
-                print(folder+str(error))
+                print(folder + str(error))
                 continue
 
             folder_checker.check_indexes()
             folder_checker.write_report()
-
-
