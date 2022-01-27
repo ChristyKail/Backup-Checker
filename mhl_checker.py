@@ -73,16 +73,19 @@ class IndexChecker:
         # make three dicts, primary, secondary, and source
         self.backup_dict_primary = {}
         for mhl in self.backup_mhl_list_primary:
+            self.log(f'Loading MHL {os.path.basename(mhl)} - this might take a second...', False)
             self.backup_dict_primary.update(mhl_to_dict_fast(mhl))
         backup_primary_file_count = len(self.backup_dict_primary)
 
         self.backup_dict_secondary = {}
         for mhl in self.backup_mhl_list_secondary:
+            self.log(f'Loading MHL {os.path.basename(mhl)} - this might take a second...', False)
             self.backup_dict_secondary.update(mhl_to_dict_fast(mhl))
         backup_secondary_file_count = len(self.backup_dict_secondary)
 
         self.source_dict = {}
         for mhl in self.source_mhl_list:
+            self.log(f'Loading MHL {os.path.basename(mhl)} - this might take a second...', False)
             self.source_dict.update(mhl_to_dict_fast(mhl))
         source_file_count = len(self.source_dict)
 
@@ -103,6 +106,9 @@ class IndexChecker:
         """perform checks on the three dicts created in init"""
 
         # check the source against the primary, if available
+
+        check_passed = True
+
         if len(self.backup_dict_primary):
 
             self.missing_primary, self.mismatch_primary = compare_dicts(self.backup_dict_primary, self.source_dict)
@@ -110,9 +116,11 @@ class IndexChecker:
             if self.missing_primary:
                 self.log("The following files are missing on primary backups:", True)
                 self.log("\n".join(self.missing_primary), True)
+                check_passed = False
             if self.mismatch_primary:
                 self.log("The following files have the wrong files size on primary backups:", True)
                 self.log("\n".join(self.mismatch_primary), True)
+                check_passed = False
         else:
             self.log("No primary backups were checked")
 
@@ -125,13 +133,17 @@ class IndexChecker:
             if self.missing_secondary:
                 self.log("The following files are missing on secondary backups:", True)
                 self.log("\n".join(self.missing_secondary), True)
+                check_passed = False
             if self.mismatch_secondary:
                 self.log("The following files have the wrong files size on primary backups:", True)
                 self.log("\n".join(self.mismatch_secondary), True)
+                check_passed = False
         else:
             self.log("No secondary backups were checked")
 
         self.log("All MHLs checked", False)
+
+        return check_passed
 
     def log(self, string: str, fail=True):
         """saves a log entry"""
@@ -273,8 +285,6 @@ def compare_dicts(backup_dict, source_dict):
 
 def mhl_to_dict_fast(mhl_file_path: str):
     dict_of_files_and_sizes = {}
-
-    print(f'Loading MHL {os.path.basename(mhl_file_path)} - this might take a second...')
 
     with open(mhl_file_path, "r") as file_handler:
         contents = file_handler.readlines()

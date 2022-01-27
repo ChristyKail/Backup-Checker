@@ -1,3 +1,4 @@
+import os
 import tkinter as tk
 from tkinter import filedialog
 import mhl_checker
@@ -12,40 +13,73 @@ class App(tk.Tk):
 
         self.title("Cinelab Film & Digital - Safe Deleter")
 
+        try:
+            self.logo_image = tk.PhotoImage(file="CFD-Icon_Standard.png")
+            self.tk.call('wm', 'iconphoto', self._w, tk.PhotoImage(file="CFD-Icon_Standard.png"))
+
+        except Exception as exception:
+            print("Logo failed to load. Reason:", exception)
+
+        else:
+            self.label_logo = tk.Label(self, image=self.logo_image, pady=10)
+            self.label_logo.grid(column=0, row=0, columnspan=4, sticky="EW")
+
         # noinspection PyTypeChecker
         self.columnconfigure(tuple(range(4)), weight=1, minsize=5, pad=10)
         # noinspection PyTypeChecker
         self.rowconfigure(tuple(range(8)), weight=1, pad=5)
 
         # load
-        self.btn_input = tk.Button(self, text="Select", command=self.load)
-        self.btn_input.grid(column=1, row=1, sticky="EW", padx=20, pady=5)
+        self.btn_input = tk.Button(self, text="Select folder", command=self.load)
+        self.btn_input.grid(column=1, row=1, columnspan=2, padx=20, pady=5)
 
-        # multiple
-        self.var_multi = tk.StringVar()
-        self.var_multi.set("False")
-        self.check_multi = tk.Checkbutton(self, variable=self.var_multi, onvalue="True", offvalue="False",
-                                          text="Multiple")
-        self.check_multi.grid(column=2, row=1, sticky="EW")
+        # label
+        self.label_info = tk.Label(self, text="Select a day folder to verify")
+        self.label_info.grid(column=0, row=2, columnspan=4, padx=20, pady=5)
+        self.text_colour = self.label_info.cget("fg")
 
-        # text
-        self.text_console = tk.Text(self, width=75)
-        self.text_console.insert(tk.END, "Select a folder to verify")
-        self.text_console.grid(column=0, row=2, columnspan=4, sticky="NSEW", pady=10)
+        # console
+        self.text_console = tk.Text(self, width=75, takefocus=0, highlightthickness=0, padx=5, pady=5, font='LucidaGrande.ttc')
+        self.text_console.grid(column=0, row=3, columnspan=4, sticky="NSEW", pady=10, padx=10)
         self.text_console['state'] = 'disabled'
 
     def load(self):
+
         folder = filedialog.askdirectory()
 
-        folder_checker = mhl_checker.IndexChecker(folder, manager=self)
+        self.reset_log()
 
-        folder_checker.check_indexes()
+        self.label_info['text'] = os.path.basename(folder)
+
+        try:
+            folder_checker = mhl_checker.IndexChecker(folder, manager=self)
+
+        except Exception as error:
+            self.log(f"Error occurred when scanning folder: {error}", True)
+            return
+
+        passed = folder_checker.check_indexes()
         folder_checker.write_report()
 
-    def log(self, string: str, fail: bool):
-        self.console_lines += 1
+        if passed:
+            self.label_info.config(fg="green")
+        else:
+            self.label_info.config(fg="red")
 
-        # self.label_console['text'] = self.label_console['text']+"\n"+string
+    def reset_log(self):
+
+        self.label_info.config(fg=self.text_colour)
+
+        self.text_console['state'] = 'normal'
+        print("Clearing log")
+        self.console_lines = 1
+        self.text_console.delete("1.0", "end")
+        self.update()
+        self.text_console['state'] = 'disabled'
+
+    def log(self, string: str, fail: bool):
+
+        self.console_lines += 1
 
         self.text_console['state'] = 'normal'
 
@@ -58,6 +92,8 @@ class App(tk.Tk):
         self.text_console.see('end')
 
         self.text_console['state'] = 'disabled'
+
+        self.update()
 
 
 if __name__ == '__main__':
