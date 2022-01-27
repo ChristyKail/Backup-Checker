@@ -34,13 +34,13 @@ class App(tk.Tk):
         self.btn_input.grid(column=1, row=1, columnspan=2, padx=20, pady=5)
 
         # label
-        self.label_info = tk.Label(self, text="Select a day folder to verify")
+        self.label_info = tk.Label(self, text="Select a day folder to verify", font=('LucidaGrande.ttc', 25))
         self.label_info.grid(column=0, row=2, columnspan=4, padx=20, pady=5)
         self.text_colour = self.label_info.cget("fg")
 
         # console
         self.text_console = tk.Text(self, width=75, takefocus=0, highlightthickness=0, padx=5, pady=5, font='LucidaGrande.ttc')
-        self.text_console.grid(column=0, row=3, columnspan=4, sticky="NSEW", pady=10, padx=10)
+        self.text_console.grid(column=0, row=3, columnspan=4, sticky="NEW", pady=10, padx=10)
         self.text_console['state'] = 'disabled'
 
     def load(self):
