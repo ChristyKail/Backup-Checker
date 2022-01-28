@@ -52,10 +52,10 @@ class App(tk.Tk):
         self.label_info['text'] = os.path.basename(folder)
 
         try:
-            folder_checker = mhl_checker.IndexChecker(folder, manager=self)
+            folder_checker = mhl_checker.BackupChecker(folder, manager=self)
 
         except Exception as error:
-            self.log(f"Error occurred when scanning folder: {error}", True)
+            self.log(f"Error occurred when scanning folder: {error}", 'fail')
             return
 
         passed = folder_checker.check_indexes()
@@ -77,17 +77,27 @@ class App(tk.Tk):
         self.update()
         self.text_console['state'] = 'disabled'
 
-    def log(self, string: str, fail: bool):
+    def log(self, string: str, log_type: str):
 
         self.console_lines += 1
-
         self.text_console['state'] = 'normal'
-
         self.text_console.insert(tk.END, "\n" + string)
 
-        if fail:
+        if log_type == "normal":
+            self.text_console.tag_add("Normal", f'{self.console_lines}.0', f'{self.console_lines}.end')
+
+        elif log_type == "good":
+            self.text_console.tag_add("Good", f'{self.console_lines}.0', f'{self.console_lines}.end')
+            self.text_console.tag_config("Good", foreground="green")
+
+        elif log_type == "warning":
+            self.text_console.tag_add("Warning", f'{self.console_lines}.0', f'{self.console_lines}.end')
+            self.text_console.tag_config("Warning", foreground="#ff9200")
+
+        elif log_type == "fail":
+
             self.text_console.tag_add("Fail", f'{self.console_lines}.0', f'{self.console_lines}.end')
-            self.text_console.tag_config("Fail", foreground="#ed3232")
+            self.text_console.tag_config("Fail", foreground="red")
 
         self.text_console.see('end')
 

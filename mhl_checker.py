@@ -4,7 +4,7 @@ import re
 from datetime import datetime
 
 
-class IndexChecker:
+class BackupChecker:
 
     def __init__(self, root_folder: str, folders_to_search=None, manager=None):
 
@@ -39,17 +39,23 @@ class IndexChecker:
 
         source_file_count = len(self.source_dict)
 
-        if len(self.source_dict) + len(self.source_mhl_list) > len(self.backup_dict_primary):
-            self.log("More files in source than primary backup!", True)
+        if self.backup_dict_primary:
+            if (len(self.source_dict) + len(self.source_mhl_list)) > len(self.backup_dict_primary):
+                self.log("More files in source than primary backup!", "fail")
+        else:
+            self.log("No primary backups to check!", "warning")
 
-        if len(self.source_dict) + len(self.source_mhl_list) > len(self.backup_dict_secondary):
-            self.log("More files in source than secondary backup!", True)
+        if self.backup_dict_secondary:
+            if (len(self.source_dict) + len(self.source_mhl_list)) > len(self.backup_dict_secondary):
+                self.log("More files in source than secondary backup!", "fail")
+        else:
+            self.log("No secondary backups to check!", "warning")
 
         print()
         self.log(f"Files in source: {source_file_count} - {source_file_count + len(self.source_mhl_list)} including "
-                 f"MHLs!", False)
-        self.log(f"Files in primary backup: {len(self.backup_dict_primary)}", False)
-        self.log(f"Files in secondary backup: {len(self.backup_dict_secondary)}", False)
+                 f"MHLs!")
+        self.log(f"Files in primary backup: {len(self.backup_dict_primary)}")
+        self.log(f"Files in secondary backup: {len(self.backup_dict_secondary)}")
         print()
 
     def add_mhls_to_dict(self, mhl_list):
@@ -59,7 +65,7 @@ class IndexChecker:
         dictionary = {}
 
         for mhl in mhl_list:
-            self.log(f'Loading MHL {os.path.basename(mhl)} - this might take a second...', False)
+            self.log(f'Loading MHL {os.path.basename(mhl)} - this might take a second...')
             dictionary.update(mhl_to_dict_fast(mhl))
 
         return dictionary
@@ -67,7 +73,7 @@ class IndexChecker:
     def get_backup_indexes(self, root_folder):
 
         # get a list of MHLs in the root folder - these are the backup indexes
-        self.log(f"Checking folder {root_folder}", False)
+        self.log(f"Checking folder {root_folder}")
         backup_mhl_list = [os.path.join(root_folder, file) for file in os.listdir(root_folder) if
                            file.endswith(".mhl")]
         # if no backup MHLs found, raise an error
@@ -79,13 +85,9 @@ class IndexChecker:
         backup_mhl_list_primary, backup_mhl_list_secondary = separate_primary_and_secondary(backup_mhl_list)
 
         # log the source indexes
-        self.log(
-            f'{len(backup_mhl_list_primary)} primary backups found: {", ".join([os.path.basename(f) for f in backup_mhl_list_primary])}',
-            False)
+        self.log(f'{len(backup_mhl_list_primary)} primary backups found: {", ".join([os.path.basename(f) for f in backup_mhl_list_primary])}')
 
-        self.log(
-            f'{len(backup_mhl_list_secondary)} secondary backups found: {", ".join([os.path.basename(f) for f in backup_mhl_list_secondary])}',
-            False)
+        self.log(f'{len(backup_mhl_list_secondary)} secondary backups found: {", ".join([os.path.basename(f) for f in backup_mhl_list_secondary])}')
 
         return backup_mhl_list_primary, backup_mhl_list_secondary
 
@@ -96,20 +98,21 @@ class IndexChecker:
         for folder_to_search in folders_to_search:
 
             if not os.path.exists(os.path.join(root_folder, folder_to_search)):
-                self.log(f'{folder_to_search} not found', False)
+                self.log(f'{folder_to_search} not found', 'warning')
 
             else:
                 for root, dirs, files in os.walk(os.path.join(root_folder, folder_to_search)):
                     for file in files:
-                        if file.endswith(".mhl"):
+                        print(type(file))
+                        if str(file).endswith("mhl"):
                             source_mhl_list.append(os.path.join(root, file))
 
         # check we found some source indexes, otherwise return
         if source_mhl_list:
 
-            self.log(f'{len(source_mhl_list)} sources found', False)
+            self.log(f'{len(source_mhl_list)} sources found')
             for mhl in source_mhl_list:
-                self.log(f'Source: {os.path.basename(mhl)}', False)
+                self.log(f'Source: {os.path.basename(mhl)}')
 
         else:
             self.log("No source indexes found")
@@ -120,24 +123,23 @@ class IndexChecker:
     def check_indexes(self):
         """perform checks on the three dicts created in init"""
 
-        # check the source against the primary, if available
-
         check_passed = True
 
+        # check the source against the primary, if available
         if len(self.backup_dict_primary):
 
             self.missing_primary, self.mismatch_primary = compare_dicts(self.backup_dict_primary, self.source_dict)
 
             if self.missing_primary:
-                self.log("The following files are missing on primary backups:", True)
-                self.log("\n".join(self.missing_primary), True)
+                self.log("The following files are missing on primary backups:", 'fail')
+                self.log("\n".join(self.missing_primary), 'fail')
                 check_passed = False
             if self.mismatch_primary:
-                self.log("The following files have the wrong files size on primary backups:", True)
-                self.log("\n".join(self.mismatch_primary), True)
+                self.log("The following files have the wrong files size on primary backups:", 'fail')
+                self.log("\n".join(self.mismatch_primary), 'fail')
                 check_passed = False
         else:
-            self.log("No primary backups were checked")
+            self.log("No primary backups were checked", 'warning')
 
         # check the source against the secondary, if available
         if len(self.backup_dict_secondary):
@@ -146,35 +148,50 @@ class IndexChecker:
                                                                             self.source_dict)
 
             if self.missing_secondary:
-                self.log("The following files are missing on secondary backups:", True)
-                self.log("\n".join(self.missing_secondary), True)
+                self.log("The following files are missing on secondary backups:", 'fail')
+                self.log("\n".join(self.missing_secondary), 'fila')
                 check_passed = False
             if self.mismatch_secondary:
-                self.log("The following files have the wrong files size on primary backups:", True)
-                self.log("\n".join(self.mismatch_secondary), True)
+                self.log("The following files have the wrong files size on primary backups:", 'fail')
+                self.log("\n".join(self.mismatch_secondary), 'fail')
                 check_passed = False
         else:
             self.log("No secondary backups were checked")
 
-        self.log("All MHLs checked", False)
+        self.log("All MHLs checked", 'good')
 
         return check_passed
 
-    def log(self, string: str, fail=True):
+    def log(self, string: str, log_type="normal"):
+
         """saves a log entry"""
 
         if self.manager:
-            self.manager.log(string, fail)
+            self.manager.log(string, log_type)
             self.manager.update()
 
-        if fail:
-            self.failed_check = True
-            self.logger.append(f'[FAIL] {string}')
+        self.logger.append(f'[{log_type.upper()}] {string}')
+
+        if log_type == "normal":
+            print(string)
+            pass
+
+        elif log_type == "good":
+            print(BColors.OKGREEN + string + BColors.ENDC)
+            pass
+
+        elif log_type == "warning":
+            print(BColors.WARNING + string + BColors.ENDC)
+            pass
+
+        elif log_type == "fail":
             print(BColors.FAIL + string + BColors.ENDC)
+            self.failed_check = True
 
         else:
-            self.logger.append(f'{string}')
-            print(string)
+            self.failed_check = True
+            print(BColors.FAIL + string + BColors.ENDC)
+            raise ValueError("Unknown log type!")
 
     def write_report(self):
         """writes out a summary of the job to the root folder"""
@@ -241,7 +258,7 @@ class IndexChecker:
                 file_handler.write(f"No secondary backups checked\n")
             file_handler.write("\n")
 
-        self.log("Report saved to disk", False)
+        self.log("Report saved to disk", 'good')
 
     def write_out_log(self, directory=""):
 
@@ -367,16 +384,12 @@ if __name__ == "__main__":
             continue
 
         else:
+            try:
+                folder_checker = BackupChecker(folder)
 
-            folder_checker = IndexChecker(folder)
-
-            # try:
-            #     folder_checker = IndexChecker(folder)
-            #
-            # except ValueError as error:
-            #
-            #     print(folder + str(error))
-            #     continue
+            except ValueError as error:
+                print(folder + str(error))
+                continue
 
             folder_checker.check_indexes()
             folder_checker.write_report()
