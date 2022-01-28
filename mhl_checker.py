@@ -13,7 +13,6 @@ class IndexChecker:
             folders_to_search = ["Camera_Media", "Sound_Media"]
 
         # set basic class variables
-
         self.manager = manager
         self.root_folder = root_folder
         self.logger = []
@@ -25,73 +24,19 @@ class IndexChecker:
         self.mismatch_primary = []
         self.mismatch_secondary = []
 
-        ######################################################################
-        # get a list of MHLs in the root folder - these are the backup indexes
-        self.log(f"Checking folder {root_folder}", False)
-        backup_mhl_list = [os.path.join(root_folder, file) for file in os.listdir(root_folder) if
-                           file.endswith(".mhl")]
-        # if no backup MHLs found, raise an error
-        if not backup_mhl_list:
-            self.log("No backup indexes were found")
-            raise ValueError("No backup indexes were found")
+        # search for the backup indexes, and the source indexes
+        self.backup_mhl_list_primary, self.backup_mhl_list_secondary = self.get_backup_indexes(root_folder)
+        self.source_mhl_list = self.get_source_indexes(root_folder, folders_to_search)
 
-        # divide the MHLs into primary  and secondary backups
-        self.backup_mhl_list_primary, self.backup_mhl_list_secondary = separate_primary_and_secondary(backup_mhl_list)
+        # parse the found MHLs into
+        self.backup_dict_primary = self.add_mhls_to_dict(self.backup_mhl_list_primary)
+        self.backup_dict_secondary = self.add_mhls_to_dict(self.backup_mhl_list_secondary)
+        self.source_dict = self.add_mhls_to_dict(self.source_mhl_list)
 
-        # log the source indexes
-        self.log(
-            f'{len(self.backup_mhl_list_primary)} primary backups found: {", ".join([os.path.basename(f) for f in self.backup_mhl_list_primary])}',
-            False)
+        self.basic_checks()
 
-        self.log(
-            f'{len(self.backup_mhl_list_secondary)} secondary backups found: {", ".join([os.path.basename(f) for f in self.backup_mhl_list_secondary])}',
-            False)
+    def basic_checks(self):
 
-        print()
-        ########################################################################
-        # get a list of MHLs in the media folders - these are the source indexes
-        self.source_mhl_list = []
-        for folder_to_search in folders_to_search:
-
-            if not os.path.exists(os.path.join(root_folder, folder_to_search)):
-                self.log(f'{folder_to_search} not found', False)
-
-            else:
-                for root, dirs, files in os.walk(os.path.join(root_folder, folder_to_search)):
-                    for file in files:
-                        if file.endswith(".mhl"):
-                            self.source_mhl_list.append(os.path.join(root, file))
-
-        # check we found some source indexes, otherwise return
-        if self.source_mhl_list:
-
-            self.log(f'{len(self.source_mhl_list)} sources found', False)
-            for mhl in self.source_mhl_list:
-                self.log(f'Source: {os.path.basename(mhl)}', False)
-
-        else:
-            self.log("No source indexes found")
-            raise ValueError("No source indexes found")
-
-        print()
-        ##################################################
-        # make three dicts, primary, secondary, and source
-        self.backup_dict_primary = {}
-        for mhl in self.backup_mhl_list_primary:
-            self.log(f'Loading MHL {os.path.basename(mhl)} - this might take a second...', False)
-            self.backup_dict_primary.update(mhl_to_dict_fast(mhl))
-        backup_primary_file_count = len(self.backup_dict_primary)
-
-        self.backup_dict_secondary = {}
-        for mhl in self.backup_mhl_list_secondary:
-            self.log(f'Loading MHL {os.path.basename(mhl)} - this might take a second...', False)
-            self.backup_dict_secondary.update(mhl_to_dict_fast(mhl))
-        backup_secondary_file_count = len(self.backup_dict_secondary)
-
-        self.source_dict = {}
-        for mhl in self.source_mhl_list:
-            self.log(f'Loading MHL {os.path.basename(mhl)} - this might take a second...', False)
-            self.source_dict.update(mhl_to_dict_fast(mhl))
         source_file_count = len(self.source_dict)
 
         if len(self.source_dict) + len(self.source_mhl_list) > len(self.backup_dict_primary):
@@ -103,9 +48,74 @@ class IndexChecker:
         print()
         self.log(f"Files in source: {source_file_count} - {source_file_count + len(self.source_mhl_list)} including "
                  f"MHLs!", False)
-        self.log(f"Files in primary backup: {backup_primary_file_count}", False)
-        self.log(f"Files in secondary backup: {backup_secondary_file_count}", False)
+        self.log(f"Files in primary backup: {len(self.backup_dict_primary)}", False)
+        self.log(f"Files in secondary backup: {len(self.backup_dict_secondary)}", False)
         print()
+
+    def add_mhls_to_dict(self, mhl_list):
+
+        print()
+
+        dictionary = {}
+
+        for mhl in mhl_list:
+            self.log(f'Loading MHL {os.path.basename(mhl)} - this might take a second...', False)
+            dictionary.update(mhl_to_dict_fast(mhl))
+
+        return dictionary
+
+    def get_backup_indexes(self, root_folder):
+
+        # get a list of MHLs in the root folder - these are the backup indexes
+        self.log(f"Checking folder {root_folder}", False)
+        backup_mhl_list = [os.path.join(root_folder, file) for file in os.listdir(root_folder) if
+                           file.endswith(".mhl")]
+        # if no backup MHLs found, raise an error
+        if not backup_mhl_list:
+            self.log("No backup indexes were found")
+            raise ValueError("No backup indexes were found")
+
+        # divide the MHLs into primary  and secondary backups
+        backup_mhl_list_primary, backup_mhl_list_secondary = separate_primary_and_secondary(backup_mhl_list)
+
+        # log the source indexes
+        self.log(
+            f'{len(backup_mhl_list_primary)} primary backups found: {", ".join([os.path.basename(f) for f in backup_mhl_list_primary])}',
+            False)
+
+        self.log(
+            f'{len(backup_mhl_list_secondary)} secondary backups found: {", ".join([os.path.basename(f) for f in backup_mhl_list_secondary])}',
+            False)
+
+        return backup_mhl_list_primary, backup_mhl_list_secondary
+
+    def get_source_indexes(self, root_folder, folders_to_search):
+
+        source_mhl_list = []
+
+        for folder_to_search in folders_to_search:
+
+            if not os.path.exists(os.path.join(root_folder, folder_to_search)):
+                self.log(f'{folder_to_search} not found', False)
+
+            else:
+                for root, dirs, files in os.walk(os.path.join(root_folder, folder_to_search)):
+                    for file in files:
+                        if file.endswith(".mhl"):
+                            source_mhl_list.append(os.path.join(root, file))
+
+        # check we found some source indexes, otherwise return
+        if source_mhl_list:
+
+            self.log(f'{len(source_mhl_list)} sources found', False)
+            for mhl in source_mhl_list:
+                self.log(f'Source: {os.path.basename(mhl)}', False)
+
+        else:
+            self.log("No source indexes found")
+            raise ValueError("No source indexes found")
+
+        return source_mhl_list
 
     def check_indexes(self):
         """perform checks on the three dicts created in init"""
@@ -357,13 +367,16 @@ if __name__ == "__main__":
             continue
 
         else:
-            try:
-                folder_checker = IndexChecker(folder)
 
-            except ValueError as error:
+            folder_checker = IndexChecker(folder)
 
-                print(folder + str(error))
-                continue
+            # try:
+            #     folder_checker = IndexChecker(folder)
+            #
+            # except ValueError as error:
+            #
+            #     print(folder + str(error))
+            #     continue
 
             folder_checker.check_indexes()
             folder_checker.write_report()
