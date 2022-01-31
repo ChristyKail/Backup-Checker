@@ -15,6 +15,7 @@ class BackupChecker:
         # set basic class variables
         self.manager = manager
         self.root_folder = root_folder
+        self.folders_to_search = folders_to_search
         self.logger = []
         self.failed_check = False
 
@@ -26,7 +27,7 @@ class BackupChecker:
 
         # search for the backup indexes, and the source indexes
         self.backup_mhl_list_primary, self.backup_mhl_list_secondary = self.get_backup_indexes(root_folder)
-        self.source_mhl_list = self.get_source_indexes(root_folder, folders_to_search)
+        self.source_mhl_list = self.get_source_indexes(root_folder)
 
         # parse the found MHLs into
         self.backup_dict_primary = self.add_mhls_to_dict(self.backup_mhl_list_primary)
@@ -56,6 +57,8 @@ class BackupChecker:
                  f"MHLs!")
         self.log(f"Files in primary backup: {len(self.backup_dict_primary)}")
         self.log(f"Files in secondary backup: {len(self.backup_dict_secondary)}")
+
+        self.log(f"Basic checks complete", "good")
         print()
 
     def add_mhls_to_dict(self, mhl_list):
@@ -85,17 +88,19 @@ class BackupChecker:
         backup_mhl_list_primary, backup_mhl_list_secondary = separate_primary_and_secondary(backup_mhl_list)
 
         # log the source indexes
-        self.log(f'{len(backup_mhl_list_primary)} primary backups found: {", ".join([os.path.basename(f) for f in backup_mhl_list_primary])}')
+        self.log(
+            f'{len(backup_mhl_list_primary)} primary backups found: {", ".join([os.path.basename(f) for f in backup_mhl_list_primary])}')
 
-        self.log(f'{len(backup_mhl_list_secondary)} secondary backups found: {", ".join([os.path.basename(f) for f in backup_mhl_list_secondary])}')
+        self.log(
+            f'{len(backup_mhl_list_secondary)} secondary backups found: {", ".join([os.path.basename(f) for f in backup_mhl_list_secondary])}')
 
         return backup_mhl_list_primary, backup_mhl_list_secondary
 
-    def get_source_indexes(self, root_folder, folders_to_search):
+    def get_source_indexes(self, root_folder):
 
         source_mhl_list = []
 
-        for folder_to_search in folders_to_search:
+        for folder_to_search in self.folders_to_search:
 
             if not os.path.exists(os.path.join(root_folder, folder_to_search)):
                 self.log(f'{folder_to_search} not found', 'warning')
@@ -103,7 +108,6 @@ class BackupChecker:
             else:
                 for root, dirs, files in os.walk(os.path.join(root_folder, folder_to_search)):
                     for file in files:
-                        print(type(file))
                         if str(file).endswith("mhl"):
                             source_mhl_list.append(os.path.join(root, file))
 
@@ -158,9 +162,47 @@ class BackupChecker:
         else:
             self.log("No secondary backups were checked")
 
-        self.log("All MHLs checked", 'good')
+        self.log(f"Index checks complete", "good")
 
         return check_passed
+
+    def check_files(self):
+
+        """checks actual source files against dictionary"""
+
+        files_in_source_storage = []
+
+        for folder_to_search in self.folders_to_search:
+
+            for root, dirs, files in os.walk(os.path.join(self.root_folder, folder_to_search)):
+
+                for file in files:
+
+                    file = trim_path_relative(os.path.join(root, file), self.folders_to_search)
+
+                    if file.endswith(".DS_Store"):
+                        print(f'Skipped {file}')
+
+                    else:
+                        files_in_source_storage.append(file)
+
+        print(f'Files in source storage {len(files_in_source_storage)}, files in primary backup {len(self.backup_dict_primary)}')
+
+        if len(self.backup_dict_primary):
+
+            for file in files_in_source_storage:
+
+                if file not in self.backup_dict_primary:
+                    self.log(f"{file} has not been indexed in primary backup!", "fail")
+
+        if len(self.backup_dict_secondary):
+
+            for file in files_in_source_storage:
+
+                if file not in self.backup_dict_secondary:
+                    self.log(f"{file} has not been indexed in secondary backup!", "fail")
+
+        self.log(f"File checks complete", "good")
 
     def log(self, string: str, log_type="normal"):
 
@@ -348,11 +390,10 @@ def mhl_to_dict_fast(mhl_file_path: str):
                 file_path = os.path.sep + os.path.join(add_roll_to_path, file_path)
 
             # head trim the path down to below Camera_Media or Sound_Media
-            if "Camera_Media" in file_path:
-                file_path = file_path.split("Camera_Media")[1]
-            elif "Sound_Media" in file_path:
-                file_path = file_path.split("Sound_Media")[1]
-            elif file_path.startswith("/Volumes/"):
+
+            file_path = trim_path_relative(file_path, ['Camera_Media', 'Sound_Media'])
+
+            if file_path.startswith("/Volumes/"):
                 if not volumes_string:
                     volumes_string = re.findall(r'^/Volumes/\w+', file_path)[0]
 
@@ -366,6 +407,17 @@ def mhl_to_dict_fast(mhl_file_path: str):
 
 def remove_xml_tag(string: str, tag_name: str):
     return string.replace(f'<{tag_name}>', "").replace(f'</{tag_name}>', "").strip()
+
+
+def trim_path_relative(file_path: str, possible_roots: list):
+
+    for possible_root in possible_roots:
+
+        if possible_root in file_path:
+            file_path = file_path.split(possible_root)[1]
+            break
+
+    return file_path
 
 
 if __name__ == "__main__":

@@ -59,6 +59,7 @@ class App(tk.Tk):
             return
 
         passed = folder_checker.check_indexes()
+        folder_checker.check_files()
         folder_checker.write_report()
 
         if passed:
