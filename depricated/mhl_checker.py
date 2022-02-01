@@ -38,17 +38,23 @@ class BackupChecker:
 
     def basic_checks(self):
 
+        """check basic things, such as whether there are fewer files in the backup than the source """
+
+        check_passed = True
+
         source_file_count = len(self.source_dict)
 
         if self.backup_dict_primary:
             if (len(self.source_dict) + len(self.source_mhl_list)) > len(self.backup_dict_primary):
                 self.log("More files in source than primary backup!", "fail")
+                check_passed = False
         else:
             self.log("No primary backups to check!", "warning")
 
         if self.backup_dict_secondary:
             if (len(self.source_dict) + len(self.source_mhl_list)) > len(self.backup_dict_secondary):
                 self.log("More files in source than secondary backup!", "fail")
+                fcheck_passed = False
         else:
             self.log("No secondary backups to check!", "warning")
 
@@ -58,8 +64,95 @@ class BackupChecker:
         self.log(f"Files in primary backup: {len(self.backup_dict_primary)}")
         self.log(f"Files in secondary backup: {len(self.backup_dict_secondary)}")
 
-        self.log(f"Basic checks complete", "good")
-        print()
+        if check_passed:
+            self.log(f"Basic checks complete", "good")
+        else:
+            self.log(f"Basic checks complete", "fail")
+
+        return check_passed
+
+    def check_indexes(self):
+        """perform checks on the three dicts created in init"""
+
+        check_passed = True
+
+        # check the source against the primary, if available
+        if len(self.backup_dict_primary):
+
+            self.missing_primary, self.mismatch_primary = compare_dicts(self.backup_dict_primary, self.source_dict)
+
+            if self.missing_primary:
+                self.log("The following files are missing on primary backups:", 'fail')
+                self.log("\n".join(self.missing_primary), 'fail')
+                check_passed = False
+            if self.mismatch_primary:
+                self.log("The following files have the wrong files size on primary backups:", 'fail')
+                self.log("\n".join(self.mismatch_primary), 'fail')
+                check_passed = False
+        else:
+            self.log("No primary backups were checked", 'warning')
+
+        # check the source against the secondary, if available
+        if len(self.backup_dict_secondary):
+
+            self.missing_secondary, self.mismatch_secondary = compare_dicts(self.backup_dict_secondary,
+                                                                            self.source_dict)
+
+            if self.missing_secondary:
+                self.log("The following files are missing on secondary backups:", 'fail')
+                self.log("\n".join(self.missing_secondary), 'fila')
+                check_passed = False
+            if self.mismatch_secondary:
+                self.log("The following files have the wrong files size on primary backups:", 'fail')
+                self.log("\n".join(self.mismatch_secondary), 'fail')
+                check_passed = False
+        else:
+            self.log("No secondary backups were checked")
+
+        if check_passed:
+            self.log(f"Index checks complete", "good")
+        else:
+            self.log(f"Index checks complete", "fail")
+
+        return check_passed
+
+    def check_files(self):
+
+        """checks actual source files against dictionary"""
+
+        files_in_source_storage = []
+
+        for folder_to_search in self.folders_to_search:
+
+            for root, dirs, files in os.walk(os.path.join(self.root_folder, folder_to_search)):
+
+                for file in files:
+
+                    file = trim_path_relative(os.path.join(root, file), self.folders_to_search)
+
+                    if file.endswith(".DS_Store"):
+                        print(f'Skipped {file}')
+
+                    else:
+                        files_in_source_storage.append(file)
+
+        print(f'Files in source storage {len(files_in_source_storage)}, files in primary backup {len(self.backup_dict_primary)}')
+
+        if len(self.backup_dict_primary):
+
+            for file in files_in_source_storage:
+
+                if file not in self.backup_dict_primary:
+                    self.log(f"{file} has not been indexed in primary backup!", "fail")
+
+        if len(self.backup_dict_secondary):
+
+            for file in files_in_source_storage:
+
+                if file not in self.backup_dict_secondary:
+                    self.log(f"{file} has not been indexed in secondary backup!", "fail")
+
+        self.log(f"File checks complete", "good")
 
     def add_mhls_to_dict(self, mhl_list):
 
@@ -123,86 +216,6 @@ class BackupChecker:
             raise ValueError("No source indexes found")
 
         return source_mhl_list
-
-    def check_indexes(self):
-        """perform checks on the three dicts created in init"""
-
-        check_passed = True
-
-        # check the source against the primary, if available
-        if len(self.backup_dict_primary):
-
-            self.missing_primary, self.mismatch_primary = compare_dicts(self.backup_dict_primary, self.source_dict)
-
-            if self.missing_primary:
-                self.log("The following files are missing on primary backups:", 'fail')
-                self.log("\n".join(self.missing_primary), 'fail')
-                check_passed = False
-            if self.mismatch_primary:
-                self.log("The following files have the wrong files size on primary backups:", 'fail')
-                self.log("\n".join(self.mismatch_primary), 'fail')
-                check_passed = False
-        else:
-            self.log("No primary backups were checked", 'warning')
-
-        # check the source against the secondary, if available
-        if len(self.backup_dict_secondary):
-
-            self.missing_secondary, self.mismatch_secondary = compare_dicts(self.backup_dict_secondary,
-                                                                            self.source_dict)
-
-            if self.missing_secondary:
-                self.log("The following files are missing on secondary backups:", 'fail')
-                self.log("\n".join(self.missing_secondary), 'fila')
-                check_passed = False
-            if self.mismatch_secondary:
-                self.log("The following files have the wrong files size on primary backups:", 'fail')
-                self.log("\n".join(self.mismatch_secondary), 'fail')
-                check_passed = False
-        else:
-            self.log("No secondary backups were checked")
-
-        self.log(f"Index checks complete", "good")
-
-        return check_passed
-
-    def check_files(self):
-
-        """checks actual source files against dictionary"""
-
-        files_in_source_storage = []
-
-        for folder_to_search in self.folders_to_search:
-
-            for root, dirs, files in os.walk(os.path.join(self.root_folder, folder_to_search)):
-
-                for file in files:
-
-                    file = trim_path_relative(os.path.join(root, file), self.folders_to_search)
-
-                    if file.endswith(".DS_Store"):
-                        print(f'Skipped {file}')
-
-                    else:
-                        files_in_source_storage.append(file)
-
-        print(f'Files in source storage {len(files_in_source_storage)}, files in primary backup {len(self.backup_dict_primary)}')
-
-        if len(self.backup_dict_primary):
-
-            for file in files_in_source_storage:
-
-                if file not in self.backup_dict_primary:
-                    self.log(f"{file} has not been indexed in primary backup!", "fail")
-
-        if len(self.backup_dict_secondary):
-
-            for file in files_in_source_storage:
-
-                if file not in self.backup_dict_secondary:
-                    self.log(f"{file} has not been indexed in secondary backup!", "fail")
-
-        self.log(f"File checks complete", "good")
 
     def log(self, string: str, log_type="normal"):
 
@@ -358,6 +371,7 @@ def compare_dicts(backup_dict, source_dict):
 
 
 def mhl_to_dict_fast(mhl_file_path: str):
+
     dict_of_files_and_sizes = {}
 
     with open(mhl_file_path, "r") as file_handler:
