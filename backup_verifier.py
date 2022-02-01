@@ -103,6 +103,8 @@ class BackupVerifier:
     def log(self, log_message: str, log_type="normal"):
         print(f'[{log_type}] {log_message}')
         self.logger.append(f'[{log_type}] {log_message}')
+        if self.manager:
+            self.manager.log(log_message, log_type)
 
     def do_verification(self):
 
@@ -125,6 +127,12 @@ class BackupVerifier:
             if not this_result:
                 passed = False
 
+            if self.manager:
+                if passed:
+                    self.manager.log(this_report, 'good')
+                else:
+                    self.manager.log(this_report, 'fail')
+
         now = datetime.now()
         current_time = now.strftime("%Y%m%d_%H%M%S")
 
@@ -133,11 +141,13 @@ class BackupVerifier:
         else:
             report_name = f'{os.path.basename(self.root_folder)} FAILED {current_time}.txt'
 
-        report_path = os.path.join(self.root_folder,report_name)
+        report_path = os.path.join(self.root_folder, report_name)
 
         with open(report_path, 'w') as file_handler:
 
             file_handler.write(report_string)
+
+        return report_string, passed
 
 
 class Backup:
@@ -248,9 +258,9 @@ class Backup:
             report_list = []
 
             if self.check_passed:
-                report_list.append(f'{self.backup_name} PASSED {datetime.now()}.txt')
+                report_list.append(f'{self.backup_name} PASSED {datetime.now()}')
             else:
-                report_list.append(f'{self.backup_name} FAILED {datetime.now()}.txt')
+                report_list.append(f'{self.backup_name} FAILED {datetime.now()}')
 
             report_list.append("\n")
 

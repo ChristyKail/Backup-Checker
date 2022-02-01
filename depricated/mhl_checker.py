@@ -54,7 +54,7 @@ class BackupChecker:
         if self.backup_dict_secondary:
             if (len(self.source_dict) + len(self.source_mhl_list)) > len(self.backup_dict_secondary):
                 self.log("More files in source than secondary backup!", "fail")
-                fcheck_passed = False
+                check_passed = False
         else:
             self.log("No secondary backups to check!", "warning")
 

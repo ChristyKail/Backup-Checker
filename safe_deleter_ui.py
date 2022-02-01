@@ -1,7 +1,7 @@
 import os
 import tkinter as tk
 from tkinter import filedialog
-from depricated import mhl_checker
+import backup_verifier
 
 
 class App(tk.Tk):
@@ -39,7 +39,8 @@ class App(tk.Tk):
         self.text_colour = self.label_info.cget("fg")
 
         # console
-        self.text_console = tk.Text(self, width=75, takefocus=0, highlightthickness=0, padx=5, pady=5, font='LucidaGrande.ttc')
+        self.text_console = tk.Text(self, width=75, takefocus=0, highlightthickness=0, padx=5, pady=5,
+                                    font='LucidaGrande.ttc')
         self.text_console.grid(column=0, row=3, columnspan=4, sticky="NEW", pady=10, padx=10)
         self.text_console['state'] = 'disabled'
 
@@ -52,15 +53,14 @@ class App(tk.Tk):
         self.label_info['text'] = os.path.basename(folder)
 
         try:
-            folder_checker = mhl_checker.BackupChecker(folder, manager=self)
+            my_verifier = backup_verifier.BackupVerifier(folder, manager=self)
 
         except Exception as error:
             self.log(f"Error occurred when scanning folder: {error}", 'fail')
             return
 
-        passed = folder_checker.check_indexes()
-        folder_checker.check_files()
-        folder_checker.write_report()
+        my_verifier.do_verification()
+        report, passed = my_verifier.write_report()
 
         if passed:
             self.label_info.config(fg="green")
@@ -80,7 +80,7 @@ class App(tk.Tk):
 
     def log(self, string: str, log_type: str):
 
-        self.console_lines += 1
+        self.console_lines = self.text_console.get("1.0", 'end').count('\n')+1
         self.text_console['state'] = 'normal'
         self.text_console.insert(tk.END, "\n" + string)
 
@@ -88,7 +88,7 @@ class App(tk.Tk):
             self.text_console.tag_add("Normal", f'{self.console_lines}.0', f'{self.console_lines}.end')
 
         elif log_type == "good":
-            self.text_console.tag_add("Good", f'{self.console_lines}.0', f'{self.console_lines}.end')
+            self.text_console.tag_add("Good", f'{self.console_lines}.0', f'end')
             self.text_console.tag_config("Good", foreground="green")
 
         elif log_type == "warning":
