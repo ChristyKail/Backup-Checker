@@ -88,7 +88,7 @@ class App(tk.Tk):
             self.text_console.tag_add("Normal", f'{self.console_lines}.0', f'{self.console_lines}.end')
 
         elif log_type == "good":
-            self.text_console.tag_add("Good", f'{self.console_lines}.0', f'end')
+            self.text_console.tag_add("Good", f'{self.console_lines}.0', f'{self.console_lines}.end')
             self.text_console.tag_config("Good", foreground="green")
 
         elif log_type == "warning":
