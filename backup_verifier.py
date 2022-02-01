@@ -28,8 +28,6 @@ class BackupVerifier:
         backup_mhl_list = self.get_backup_indexes(root_folder)
         backup_mhl_groups = separate_primary_and_secondary(backup_mhl_list)
 
-        backup_names = ["Primary", "Secondary", "Tertiary"]
-
         for ii, group_list in enumerate(backup_mhl_groups):
             print(group_list)
 
@@ -106,7 +104,7 @@ class BackupVerifier:
         if self.manager:
             self.manager.log(log_message, log_type)
 
-    def do_verification(self):
+    def do_verification(self, check_for_deleted=True):
 
         for backup in self.backups:
             print_colour(backup.backup_name, PrintColours.HEADER)
@@ -114,6 +112,9 @@ class BackupVerifier:
             backup.quick_check()
             backup.check_files()
             backup.check_index()
+            if check_for_deleted:
+                backup.check_source_files_integrity()
+
             backup.checks_run = True
 
     def write_report(self):
@@ -126,12 +127,11 @@ class BackupVerifier:
         if len(self.backups) < 2:
             self.manager.log("Only 1 backup was verified", "warning")
 
-        report_string = mhl_info+'\n'
+        report_string = mhl_info + '\n'
 
         for backup in self.backups:
-
-            report_string = report_string+'\t'+backup.backup_name+'\n'
-            self.manager.log("\t"+backup.backup_name, "normal")
+            report_string = report_string + '\t' + backup.backup_name + '\n'
+            self.manager.log("\t" + backup.backup_name, "normal")
 
         # report and log each backup report
         for backup in self.backups:
@@ -188,6 +188,8 @@ class Backup:
 
     def quick_check(self):
 
+        """do a quick check of counts to see if everything matches"""
+
         check_passed = True
 
         print(
@@ -214,6 +216,8 @@ class Backup:
 
     def check_index(self):
 
+        """Check every source index against the backup index"""
+
         check_passed = True
 
         for file_name, file_size in self.source_index.items():
@@ -236,6 +240,9 @@ class Backup:
         return check_passed
 
     def check_files(self):
+
+        """Check every file against the backup index. Also check every file against the source index to ensure we
+        don't have improperly indexed files """
 
         check_passed = True
         mhl_count = 0
@@ -261,17 +268,28 @@ class Backup:
                 print_colour(f"File check: {file_name} not backup index", PrintColours.FAIL)
                 check_passed = False
 
+        if mhl_count != self.roll_count:
+            print_colour("Roll count doesn't match MHL count", PrintColours.WARNING)
+            check_passed = False
+
+        if not check_passed:
+            self.check_passed = False
+        return check_passed
+
+    def check_source_files_integrity(self):
+
+        """Checks source index against the backup files, checking if source files have been deleted"""
+
+        check_passed = True
+
         # worry about having fewer files then in the source index
         for index_file_name in self.source_index.keys():
 
             if index_file_name not in self.source_files:
                 self.files_missing_vs_source_index.append(index_file_name)
-                print_colour(f"File check: {file_name} referenced in source index, but not in files. Has it been "
+                print_colour(f"File check: {index_file_name} referenced in source index, but not in files. Has it been "
                              f"deleted?", PrintColours.WARNING)
-
-        if mhl_count != self.roll_count:
-            print_colour("Roll count doesn't match MHL count", PrintColours.WARNING)
-            check_passed = False
+                check_passed = False
 
         if not check_passed:
             self.check_passed = False
@@ -315,7 +333,8 @@ class Backup:
             for line in self.unindexed_files:
                 report_list.append(f"\t{line}\n")
 
-            report_list.append(f'Source indexes that are missing source files: {len(self.files_missing_vs_source_index)}\n')
+            report_list.append(
+                f'Source indexes that are missing source files: {len(self.files_missing_vs_source_index)}\n')
             for line in self.files_missing_vs_source_index:
                 report_list.append(f"\t{line}\n")
 
