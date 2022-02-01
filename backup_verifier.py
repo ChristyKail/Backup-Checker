@@ -118,12 +118,25 @@ class BackupVerifier:
 
     def write_report(self):
 
-        report_string = ""
         passed = True
 
+        # report and log number of MHLs
+        mhl_info = f'Backups checked: {len(self.backups)}'
+        self.manager.log(mhl_info, "normal")
+        if len(self.backups) < 2:
+            self.manager.log("Only 1 backup was verified", "warning")
+
+        report_string = mhl_info+'\n'
+
+        for backup in self.backups:
+
+            report_string = report_string+'\t'+backup.backup_name+'\n'
+            self.manager.log("\t"+backup.backup_name, "normal")
+
+        # report and log each backup report
         for backup in self.backups:
             this_report, this_result = backup.report(self)
-            report_string = report_string+this_report+"\n\n"
+            report_string = report_string + this_report + "\n\n"
             if not this_result:
                 passed = False
 
@@ -171,6 +184,8 @@ class Backup:
         self.missing_vs_files = []
         self.unindexed_files = []
 
+        self.files_missing_vs_source_index = []
+
     def quick_check(self):
 
         check_passed = True
@@ -203,13 +218,13 @@ class Backup:
 
         for file_name, file_size in self.source_index.items():
 
-            # check if file is missing
+            # check if index is missing
             if file_name not in self.backup_index.keys():
                 self.missing_vs_index.append(file_name)
                 print_colour(f"Index check: {file_name} not in backup index", PrintColours.FAIL)
                 check_passed = False
 
-            # check if file is different size
+            # check if index is different size
             elif file_size != self.backup_index[file_name]:
                 self.mismatched_size.append(file_name)
                 print_colour(f"Index check: {file_name} source index wrong size compared backup index",
@@ -225,8 +240,10 @@ class Backup:
         check_passed = True
         mhl_count = 0
 
+        # worry about having more files than indexes
         for file_name in self.source_files:
 
+            # check for any files not in source index
             if file_name not in self.source_index.keys():
 
                 if file_name.endswith(".mhl"):
@@ -238,10 +255,19 @@ class Backup:
                                  f"backup?", PrintColours.WARNING)
                     check_passed = False
 
+            # check for any files not in backup index
             if file_name not in self.backup_index.keys():
                 self.missing_vs_files.append(file_name)
                 print_colour(f"File check: {file_name} not backup index", PrintColours.FAIL)
                 check_passed = False
+
+        # worry about having fewer files then in the source index
+        for index_file_name in self.source_index.keys():
+
+            if index_file_name not in self.source_files:
+                self.files_missing_vs_source_index.append(index_file_name)
+                print_colour(f"File check: {file_name} referenced in source index, but not in files. Has it been "
+                             f"deleted?", PrintColours.WARNING)
 
         if mhl_count != self.roll_count:
             print_colour("Roll count doesn't match MHL count", PrintColours.WARNING)
@@ -285,8 +311,12 @@ class Backup:
             for line in self.mismatched_size:
                 report_list.append(f"\t{line}\n")
 
-            report_list.append(f'Source files that have no index: {len(self.unindexed_files)}\n')
+            report_list.append(f'Source files that have no source index: {len(self.unindexed_files)}\n')
             for line in self.unindexed_files:
+                report_list.append(f"\t{line}\n")
+
+            report_list.append(f'Source indexes that are missing source files: {len(self.files_missing_vs_source_index)}\n')
+            for line in self.files_missing_vs_source_index:
                 report_list.append(f"\t{line}\n")
 
             return ''.join(report_list), self.check_passed
