@@ -344,6 +344,33 @@ class Backup:
 
             return 'Checks not yet run', False
 
+    #   cleaned up checking stuff
+    def source_i_vs_backup_i(self):
+        """check if every source index is in the backup index"""
+
+        for source_i in self.source_index.keys():
+            if source_i not in self.backup_index.keys():
+                print(f'{source_i} index not in backup!')
+
+    def source_f_vs_backup_i(self):
+        """check if every existing file is in the backup index"""
+
+        for source_f in self.source_files:
+            if source_f not in self.backup_index.keys():
+                print(f'{source_f} file not in backup!')
+
+    def source_f_vs_source_i(self):
+        """check if every existing file is in the source index - have any files been added without a source index?"""
+        for source_f in self.source_files:
+            if source_f not in self.source_index.keys():
+                print(f'{source_f} file not in source index!')
+
+    def source_i_vs_source_f(self):
+        """check if every source index is in the existing files - have any files been deleted since offload?"""
+        for source_i in self.source_index.keys():
+            if source_i not in self.source_files:
+                print(f'{source_i} index not in source source files!')
+
 
 def mhl_to_dict_fast(mhl_file_path: str):
     dict_of_files_and_sizes = {}

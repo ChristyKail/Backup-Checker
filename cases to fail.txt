@@ -1,0 +1,17 @@
+Cases to check for:
+- Wrong roll has been backed up, or roll has been missed when backing up
+	- file and source index will not be in backup index
+- Source file has been deleted or moved prior to backing up
+	- source index will not be in file list or backup index
+- Files didn't have source MHLs made for them (such as mezz files, or files that have been drag and dropped)
+	- file will not be in source index
+
+
+
+checks to write:
+
+- Source index vs backup index - check if any source indexes are missing from the backup index
+- Source files vs backup index - check if any existing files are missing from the backup index
+
+- Source files integrity - check if any source indexes are missing from the source files
+- Source index integrity - check if any files are missing from the source index
