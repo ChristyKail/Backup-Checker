@@ -10,11 +10,15 @@ class BackupVerifier:
         if folders_to_search is None:
             folders_to_search = ["Camera_Media", "Sound_Media"]
 
+        if manager is None:
+            manager = self.DummyManager()
+
         self.manager = manager
         self.root_folder = root_folder
         self.folders_to_search = folders_to_search
         self.logger = []
         self.backups = []
+        self.verified = False
 
         # get files list
 
@@ -29,12 +33,8 @@ class BackupVerifier:
         backup_mhl_groups = separate_primary_and_secondary(backup_mhl_list)
 
         for ii, group_list in enumerate(backup_mhl_groups):
-            print(group_list)
-
             group_dict = self.list_of_mhls_to_dict(group_list)
-
             mhls = [trim_path_relative(m, self.folders_to_search) for m in self.source_mhl_list]
-            print(mhls)
             b = Backup(os.path.basename(group_list[0]), group_dict, source_index, source_files, mhls)
             self.backups.append(b)
 
@@ -45,7 +45,7 @@ class BackupVerifier:
         for folder_to_search in self.folders_to_search:
 
             if not os.path.exists(os.path.join(root_folder, folder_to_search)):
-                self.log(f'{folder_to_search} not found', 'warning')
+                self.manager.log(f'{folder_to_search} not found', 4)
 
             else:
                 for root, dirs, files in os.walk(os.path.join(root_folder, folder_to_search)):
@@ -56,18 +56,18 @@ class BackupVerifier:
         # check we found some source indexes, otherwise return
         if source_mhl_list:
 
-            self.log(f'{len(source_mhl_list)} sources found')
+            self.manager.log(f'{len(source_mhl_list)} sources found', 1)
             for mhl in source_mhl_list:
-                self.log(f'Source: {os.path.basename(mhl)}')
+                self.manager.log(f'Source: {os.path.basename(mhl)}', 0)
 
         else:
-            self.log("No source indexes found")
             raise ValueError("No source indexes found")
 
         return source_mhl_list
 
     def get_backup_indexes(self, root_folder):
-        self.log(f"Checking folder {root_folder}")
+
+        self.manager.log(f"Checking folder {root_folder}", 1)
         backup_mhl_list = [os.path.join(root_folder, file) for file in os.listdir(root_folder) if
                            file.endswith(".mhl")]
 
@@ -84,7 +84,7 @@ class BackupVerifier:
                     file = trim_path_relative(os.path.join(str(root), str(file)), folders_to_search)
 
                     if file.endswith(".DS_Store"):
-                        print(f'Skipped {file}')
+                        self.manager.log(f"Skipped hidden file {file}", 1)
 
                     else:
                         file_list.append(file)
@@ -95,22 +95,19 @@ class BackupVerifier:
         dictionary = {}
 
         for mhl in mhl_list:
-            self.log(f'Loading MHL {os.path.basename(mhl)} - this might take a second...')
+            self.manager.log(f'Loading MHL {os.path.basename(mhl)} - this might take a second...', 1)
             dictionary.update(mhl_to_dict_fast(mhl))
 
         return dictionary
 
-    def log(self, log_message: str, log_type="normal"):
-        print(f'[{log_type}] {log_message}')
-        self.logger.append(f'[{log_type}] {log_message}')
-        if self.manager:
-            self.manager.log(log_message, log_type)
+    def run_checks(self):
 
-    def do_verification_but_better(self):
+        passed = True
 
         for backup in self.backups:
-            print()
-            print(backup.backup_name)
+
+            # only do this when you're about to run checks!
+            backup.checks_passed = True
 
             backup.quick_check()
 
@@ -122,34 +119,39 @@ class BackupVerifier:
 
             backup.checks_run = True
 
-    def write_report(self):
+            if not backup.checks_passed:
+                passed = False
+
+        return passed
+
+    def write_report(self, skip_writing_file=False):
 
         passed = True
 
         # report and log number of MHLs
         mhl_info = f'Backups checked: {len(self.backups)}'
-        self.manager.log(mhl_info, "normal")
+
+        self.manager.log(mhl_info, 1)
         if len(self.backups) < 2:
-            self.manager.log("Only 1 backup was verified", "warning")
+            self.manager.log("Only 1 backup was verified", 3)
 
         report_string = mhl_info + '\n'
 
         for backup in self.backups:
             report_string = report_string + '\t' + backup.backup_name + '\n'
-            self.manager.log("\t" + backup.backup_name, "normal")
+            self.manager.log("\t" + backup.backup_name, 1)
 
         # report and log each backup report
         for backup in self.backups:
-            this_report, this_result = backup.report(self)
+            this_report, this_result = backup.return_summary(self)
             report_string = report_string + this_report + "\n\n"
             if not this_result:
                 passed = False
 
-            if self.manager:
-                if passed:
-                    self.manager.log(this_report, 'good')
-                else:
-                    self.manager.log(this_report, 'fail')
+            if passed:
+                self.manager.log(this_report, 2)
+            else:
+                self.manager.log(this_report, 4)
 
         now = datetime.now()
         current_time = now.strftime("%Y%m%d_%H%M%S")
@@ -161,11 +163,29 @@ class BackupVerifier:
 
         report_path = os.path.join(self.root_folder, report_name)
 
-        with open(report_path, 'w') as file_handler:
-
-            file_handler.write(report_string)
+        if not skip_writing_file:
+            with open(report_path, 'w') as file_handler:
+                file_handler.write(report_string)
 
         return report_string, passed
+
+    class DummyManager:
+
+        def log(self, message, log_level):
+
+            if log_level == 4:
+                colour = PrintColours.FAIL
+
+            elif log_level == 3:
+                colour = PrintColours.WARNING
+
+            elif log_level == 2:
+                colour = PrintColours.OKGREEN
+
+            else:
+                colour = ""
+
+            print_colour(message, colour)
 
 
 class Backup:
@@ -175,7 +195,7 @@ class Backup:
         self.backup_name = name
 
         self.checks_run = False
-        self.check_passed = True
+        self.checks_passed = False
 
         self.backup_index = backup_index
         self.source_index = source_index
@@ -190,13 +210,13 @@ class Backup:
         self.source_f_missing_in_source_i = []
         self.source_i_missing_in_source_f = []
 
-    def report(self, verifier: BackupVerifier):
+    def return_summary(self, verifier: BackupVerifier):
 
         if self.checks_run:
 
             report_list = []
 
-            if self.check_passed:
+            if self.checks_passed:
                 report_list.append(f'{self.backup_name} PASSED {datetime.now()}')
             else:
                 report_list.append(f'{self.backup_name} FAILED {datetime.now()}')
@@ -209,8 +229,6 @@ class Backup:
                 report_list.append(f"\t{os.path.basename(line)}\n")
 
             report_list.append("\n")
-
-            # list all the missing primary files
 
             report_list.append(f'Source indexes missing from backup index: {len(self.source_i_missing_in_backup_i)}\n')
             for line in self.source_i_missing_in_backup_i:
@@ -233,7 +251,7 @@ class Backup:
             for line in self.source_i_missing_in_source_f:
                 report_list.append(f"\t{line}\n")
 
-            return ''.join(report_list), self.check_passed
+            return ''.join(report_list), self.checks_passed
 
         else:
 
@@ -247,51 +265,50 @@ class Backup:
 
         roll_count = len(self.source_mhls)
 
-        print(f"Existing files {len(self.source_files)}")
-        print(f"Source indexes {len(self.source_index) + roll_count}")
-        print(f"Backup indexes {len(self.backup_index)}")
-
         # check source index vs files
         if len(self.source_files) > len(self.source_index) + roll_count:
-            print_colour("More files in folder than source index, have some been added incorrectly?", PrintColours.FAIL)
+
             check_passed = False
 
         elif len(self.source_files) < len(self.source_index) + roll_count:
-            print_colour("Fewer files in folder than source index, have some been deleted?", PrintColours.FAIL)
+
             check_passed = False
 
         # check index lengths
         if len(self.source_index) + roll_count > len(self.backup_index):
-            print_colour("More files in source index than backup index, something hasn't been backed up",
-                         PrintColours.FAIL)
+
             check_passed = False
 
         if not check_passed:
-            self.check_passed = False
+            self.checks_passed = False
 
         return check_passed
 
     def source_i_vs_backup_i(self):
+
         """check if every source index is in the backup index"""
-        print('check if every source index is in the backup index')
-        for source_i in self.source_index.keys():
+
+        for source_i, source_size in self.source_index.items():
             if source_i not in self.backup_index.keys():
                 self.source_i_missing_in_backup_i.append(source_i)
-                print(f'{source_i} index not in backup!')
-                self.check_passed = False
+                self.checks_passed = False
+
+            elif source_size != self.backup_index[source_i]:
+                self.source_i_wrong_in_backup_i.append(source_i)
+                self.checks_passed = False
 
     def source_f_vs_backup_i(self):
+
         """check if every existing file is in the backup index"""
-        print('check if every existing file is in the backup index')
+
         for source_f in self.source_files:
             if source_f not in self.backup_index.keys():
                 self.source_f_missing_in_backup_i.append(source_f)
-                print(f'{source_f} file not in backup!')
-                self.check_passed = False
+                self.checks_passed = False
 
     def source_f_vs_source_i(self):
+
         """check if every existing file is in the source index - have any files been added without a source index?"""
-        print('check if every existing file is in the source index - have any files been added without a source index?')
 
         mhl_count = 0
         for source_f in self.source_files:
@@ -302,19 +319,16 @@ class Backup:
 
             if source_f not in self.source_index.keys():
                 self.source_f_missing_in_source_i.append(source_f)
-                print(f'{source_f} file not in source index!')
-                self.check_passed = False
-
-        print(f'Skipped {mhl_count} source MHLs, which won\'t be in themselves obviously!')
+                self.checks_passed = False
 
     def source_i_vs_source_f(self):
+
         """check if every source index is in the existing files - have any files been deleted since offload?"""
-        print('check if every source index is in the existing files - have any files been deleted since offload?')
+
         for source_i in self.source_index.keys():
             if source_i not in self.source_files:
                 self.source_i_missing_in_source_f.append(source_i)
-                print(f'{source_i} index not in source files!')
-                self.check_passed = False
+                self.checks_passed = False
 
 
 def mhl_to_dict_fast(mhl_file_path: str):
@@ -412,4 +426,4 @@ def print_colour(message, print_type):
 
 if __name__ == '__main__':
     my_verifier = BackupVerifier("/Users/christykail/Sample footage/Test backups/Day 001")
-    my_verifier.do_verification_but_better()
+    my_verifier.run_checks()

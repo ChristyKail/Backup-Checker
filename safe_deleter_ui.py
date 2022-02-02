@@ -59,7 +59,7 @@ class App(tk.Tk):
             self.log(f"Error occurred when scanning folder: {error}", 'fail')
             return
 
-        my_verifier.do_verification_but_better()
+        my_verifier.run_checks()
         report, passed = my_verifier.write_report()
 
         if passed:
@@ -78,24 +78,24 @@ class App(tk.Tk):
         self.update()
         self.text_console['state'] = 'disabled'
 
-    def log(self, string: str, log_type: str):
+    def log(self, string: str, log_level: int):
 
         self.console_lines = self.text_console.get("1.0", 'end').count('\n')+1
         self.text_console['state'] = 'normal'
         self.text_console.insert(tk.END, "\n" + string)
 
-        if log_type == "normal":
+        if log_level == 0 or log_level == 1:
             self.text_console.tag_add("Normal", f'{self.console_lines}.0', f'{self.console_lines}.end')
 
-        elif log_type == "good":
+        elif log_level == 2:
             self.text_console.tag_add("Good", f'{self.console_lines}.0', f'{self.console_lines}.end')
             self.text_console.tag_config("Good", foreground="green")
 
-        elif log_type == "warning":
+        elif log_level == 3:
             self.text_console.tag_add("Warning", f'{self.console_lines}.0', f'{self.console_lines}.end')
             self.text_console.tag_config("Warning", foreground="#ff9200")
 
-        elif log_type == "fail":
+        elif log_level == 4:
 
             self.text_console.tag_add("Fail", f'{self.console_lines}.0', f'{self.console_lines}.end')
             self.text_console.tag_config("Fail", foreground="red")
