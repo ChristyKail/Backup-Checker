@@ -33,15 +33,22 @@ class App(tk.Tk):
         self.btn_input = tk.Button(self, text="Select folder", command=self.load)
         self.btn_input.grid(column=1, row=1, columnspan=2, padx=20, pady=5)
 
+        # check files
+        self.var_files = tk.BooleanVar()
+        self.var_files.set(True)
+        self.check_files = tk.Checkbutton(self, text="Check files as well as indexes", variable=self.var_files, onvalue=True, offvalue=False)
+        self.check_files['state'] = 'disabled'
+        self.check_files.grid(column=1, row=2, columnspan=2, padx=20, pady=5)
+
         # label
         self.label_info = tk.Label(self, text="Select a day folder to verify", font=('LucidaGrande.ttc', 25))
-        self.label_info.grid(column=0, row=2, columnspan=4, padx=20, pady=5)
+        self.label_info.grid(column=0, row=3, columnspan=4, padx=20, pady=5)
         self.text_colour = self.label_info.cget("fg")
 
         # console
         self.text_console = tk.Text(self, width=75, takefocus=0, highlightthickness=0, padx=5, pady=5,
                                     font='LucidaGrande.ttc')
-        self.text_console.grid(column=0, row=3, columnspan=4, sticky="NEW", pady=10, padx=10)
+        self.text_console.grid(column=0, row=4, columnspan=4, sticky="NEW", pady=10, padx=10)
         self.text_console['state'] = 'disabled'
 
     def load(self):
@@ -56,10 +63,10 @@ class App(tk.Tk):
             my_verifier = backup_verifier.BackupVerifier(folder, manager=self)
 
         except Exception as error:
-            self.log(f"Error occurred when scanning folder: {error}", 'fail')
+            self.log(f"Error occurred when scanning folder: {error}", 4)
             return
 
-        my_verifier.run_checks()
+        my_verifier.run_checks(file_checks=self.var_files.get())
         report, passed = my_verifier.write_report()
 
         if passed:

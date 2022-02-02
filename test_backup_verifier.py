@@ -34,7 +34,7 @@ class TestBackup(unittest.TestCase):
         self.assertEqual(len(test_verifier.backups), 1)
 
         test_verifier.run_checks()
-        report, checks_passed = test_verifier.write_report(skip_writing_file=True)
+        report, these_checks_passed = test_verifier.write_report(skip_writing_file=True)
         test_backup = test_verifier.backups[0]
 
         self.assertEqual(len(test_backup.source_index) + len(test_backup.source_mhls), 18)
@@ -46,7 +46,7 @@ class TestBackup(unittest.TestCase):
         self.assertEqual(len(test_backup.source_f_missing_in_source_i), 0)
 
         self.assertFalse(test_backup.checks_passed())
-        self.assertFalse(checks_passed)
+        self.assertFalse(these_checks_passed)
 
     def test_wrong_file_size(self):
         test_verifier = backup_verifier.BackupVerifier("/Users/christykail/Sample footage/Test backups/2_Wrong_File_Size")

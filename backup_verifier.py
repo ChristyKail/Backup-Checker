@@ -100,21 +100,27 @@ class BackupVerifier:
 
         return dictionary
 
-    def run_checks(self):
+    def run_checks(self, file_checks=True):
 
         passed = True
+
+        if file_checks:
+            check_count = 5
+
+        else:
+            check_count = 2
 
         for backup in self.backups:
 
             backup.quick_check()
-
             backup.source_i_vs_backup_i()
-            backup.source_f_vs_backup_i()
 
-            backup.source_f_vs_source_i()
-            backup.source_i_vs_source_f()
+            if file_checks:
+                backup.source_f_vs_backup_i()
+                backup.source_f_vs_source_i()
+                backup.source_i_vs_source_f()
 
-            if not backup.checks_passed():
+            if backup.checks_passed(count=check_count) is False:
                 passed = False
 
         return passed
@@ -205,6 +211,8 @@ class Backup:
         self.source_i_missing_in_source_f = []
 
     def checks_passed(self, count=5):
+
+        print(f'{count} checks to pass, {len(self.checks_run)} seem to have been run')
 
         if len(self.checks_run) < count:
             return False
