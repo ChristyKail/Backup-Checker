@@ -59,7 +59,7 @@ class App(tk.Tk):
             self.log(f"Error occurred when scanning folder: {error}", 'fail')
             return
 
-        my_verifier.do_verification()
+        my_verifier.do_verification_but_better()
         report, passed = my_verifier.write_report()
 
         if passed:
