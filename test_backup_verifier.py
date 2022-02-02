@@ -24,7 +24,7 @@ class TestBackup(unittest.TestCase):
         self.assertEqual(len(test_backup.source_i_missing_in_source_f), 0)
         self.assertEqual(len(test_backup.source_f_missing_in_source_i), 0)
 
-        self.assertTrue(test_backup.checks_passed)
+        self.assertTrue(test_backup.checks_passed())
         self.assertTrue(checks_passed)
 
     def test_missing_backup(self):
@@ -45,7 +45,7 @@ class TestBackup(unittest.TestCase):
         self.assertEqual(len(test_backup.source_i_missing_in_source_f), 0)
         self.assertEqual(len(test_backup.source_f_missing_in_source_i), 0)
 
-        self.assertFalse(test_backup.checks_passed)
+        self.assertFalse(test_backup.checks_passed())
         self.assertFalse(checks_passed)
 
     def test_wrong_file_size(self):
@@ -65,7 +65,7 @@ class TestBackup(unittest.TestCase):
         self.assertEqual(len(test_backup.source_i_missing_in_source_f), 0)
         self.assertEqual(len(test_backup.source_f_missing_in_source_i), 0)
 
-        self.assertFalse(test_backup.checks_passed)
+        self.assertFalse(test_backup.checks_passed())
         self.assertFalse(checks_passed)
 
     def test_unindexed_files(self):
@@ -85,7 +85,7 @@ class TestBackup(unittest.TestCase):
         self.assertEqual(len(test_backup.source_i_missing_in_source_f), 0)
         self.assertEqual(len(test_backup.source_f_missing_in_source_i), 9)
 
-        self.assertFalse(test_backup.checks_passed)
+        self.assertFalse(test_backup.checks_passed())
         self.assertFalse(checks_passed)
 
     def test_deleted_file(self):
@@ -105,7 +105,7 @@ class TestBackup(unittest.TestCase):
         self.assertEqual(len(test_backup.source_i_missing_in_source_f), 1)
         self.assertEqual(len(test_backup.source_f_missing_in_source_i), 0)
 
-        self.assertFalse(test_backup.checks_passed)
+        self.assertFalse(test_backup.checks_passed())
         self.assertFalse(checks_passed)
 
 

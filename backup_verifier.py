@@ -106,9 +106,6 @@ class BackupVerifier:
 
         for backup in self.backups:
 
-            # only do this when you're about to run checks!
-            backup.checks_passed = True
-
             backup.quick_check()
 
             backup.source_i_vs_backup_i()
@@ -117,9 +114,7 @@ class BackupVerifier:
             backup.source_f_vs_source_i()
             backup.source_i_vs_source_f()
 
-            backup.checks_run = True
-
-            if not backup.checks_passed:
+            if not backup.checks_passed():
                 passed = False
 
         return passed
@@ -194,8 +189,7 @@ class Backup:
 
         self.backup_name = name
 
-        self.checks_run = False
-        self.checks_passed = False
+        self.checks_run = {}
 
         self.backup_index = backup_index
         self.source_index = source_index
@@ -210,16 +204,33 @@ class Backup:
         self.source_f_missing_in_source_i = []
         self.source_i_missing_in_source_f = []
 
+    def checks_passed(self, count=5):
+
+        if len(self.checks_run) < count:
+            return False
+
+        elif False in self.checks_run.values():
+            return False
+
+        else:
+            return True
+
     def return_summary(self, verifier: BackupVerifier):
 
-        if self.checks_run:
+        if len(self.checks_run) != 0:
 
             report_list = []
 
-            if self.checks_passed:
+            if self.checks_passed():
                 report_list.append(f'{self.backup_name} PASSED {datetime.now()}')
             else:
                 report_list.append(f'{self.backup_name} FAILED {datetime.now()}')
+
+            report_list.append("\n")
+
+            report_list.append("Checks run:\n")
+            for check, result in self.checks_run.items():
+                report_list.append(f'\t{check}\n')
 
             report_list.append("\n")
 
@@ -251,7 +262,7 @@ class Backup:
             for line in self.source_i_missing_in_source_f:
                 report_list.append(f"\t{line}\n")
 
-            return ''.join(report_list), self.checks_passed
+            return ''.join(report_list), self.checks_passed()
 
         else:
 
@@ -276,11 +287,9 @@ class Backup:
 
         # check index lengths
         if len(self.source_index) + roll_count > len(self.backup_index):
-
             check_passed = False
 
-        if not check_passed:
-            self.checks_passed = False
+        self.checks_run['Quick Check'] = check_passed
 
         return check_passed
 
@@ -288,27 +297,37 @@ class Backup:
 
         """check if every source index is in the backup index"""
 
+        check_passed = True
+
         for source_i, source_size in self.source_index.items():
             if source_i not in self.backup_index.keys():
                 self.source_i_missing_in_backup_i.append(source_i)
-                self.checks_passed = False
+                check_passed = False
 
             elif source_size != self.backup_index[source_i]:
                 self.source_i_wrong_in_backup_i.append(source_i)
-                self.checks_passed = False
+                check_passed = False
+
+        self.checks_run["Source index vs backup index, including size"] = check_passed
 
     def source_f_vs_backup_i(self):
 
         """check if every existing file is in the backup index"""
 
+        check_passed = True
+
         for source_f in self.source_files:
             if source_f not in self.backup_index.keys():
                 self.source_f_missing_in_backup_i.append(source_f)
-                self.checks_passed = False
+                check_passed = False
+
+        self.checks_run["Source files vs backup index"] = check_passed
 
     def source_f_vs_source_i(self):
 
         """check if every existing file is in the source index - have any files been added without a source index?"""
+
+        check_passed = True
 
         mhl_count = 0
         for source_f in self.source_files:
@@ -319,16 +338,22 @@ class Backup:
 
             if source_f not in self.source_index.keys():
                 self.source_f_missing_in_source_i.append(source_f)
-                self.checks_passed = False
+                check_passed = False
+
+        self.checks_run["Source files vs source index"] = check_passed
 
     def source_i_vs_source_f(self):
 
         """check if every source index is in the existing files - have any files been deleted since offload?"""
 
+        check_passed = True
+
         for source_i in self.source_index.keys():
             if source_i not in self.source_files:
                 self.source_i_missing_in_source_f.append(source_i)
-                self.checks_passed = False
+                check_passed = False
+
+        self.checks_run["Source index vs source files"] = check_passed
 
 
 def mhl_to_dict_fast(mhl_file_path: str):
