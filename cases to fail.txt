@@ -15,3 +15,13 @@ checks to write:
 
 - Source files integrity - check if any source indexes are missing from the source files
 - Source index integrity - check if any files are missing from the source index
+
+
+
+
+TODO STUFF
+
+Skip hidden files, but also log them
+Report if any requested source folders were Skipped
+Allow different source folders to be scanned
+Be more flexible about where to trim LTO file structure

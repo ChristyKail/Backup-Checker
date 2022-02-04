@@ -40,6 +40,8 @@ class App(tk.Tk):
         self.check_files['state'] = 'disabled'
         self.check_files.grid(column=1, row=2, columnspan=2, padx=20, pady=5)
 
+
+
         # label
         self.label_info = tk.Label(self, text="Select a day folder to verify", font=('LucidaGrande.ttc', 25))
         self.label_info.grid(column=0, row=3, columnspan=4, padx=20, pady=5)
@@ -60,13 +62,14 @@ class App(tk.Tk):
         self.label_info['text'] = os.path.basename(folder)
 
         try:
-            my_verifier = backup_verifier.BackupVerifier(folder, manager=self)
+            my_verifier = backup_verifier.BackupVerifier(folder, manager=self, source_i_root_pattern=r'_hde|wav$')
 
         except Exception as error:
             self.log(f"Error occurred when scanning folder: {error}", 4)
             return
 
-        my_verifier.run_checks(file_checks=self.var_files.get())
+        # TODO fix this so we we can toggle it properly
+        my_verifier.run_checks(file_checks=False)
         report, passed = my_verifier.write_report()
 
         if passed:

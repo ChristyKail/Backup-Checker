@@ -6,7 +6,9 @@ from datetime import datetime
 
 class BackupVerifier:
 
-    def __init__(self, root_folder: str, folders_to_search=None, manager=None):
+    def __init__(self, root_folder: str, folders_to_search=None, manager=None, source_i_root_pattern=r'_Media$',
+                 source_i_trim_top_levels=0, source_i_add_parent_folders=0):
+
         if folders_to_search is None:
             folders_to_search = ["Camera_Media", "Sound_Media"]
 
@@ -20,20 +22,29 @@ class BackupVerifier:
         self.backups = []
         self.verified = False
 
+        # options for loading source MHLs
+        self.source_i_root_pattern = source_i_root_pattern
+        self.source_i_trim_top_levels = source_i_trim_top_levels
+        self.source_i_add_parent_folders = source_i_add_parent_folders
+
+        # TODO report this
+        self.source_folders_skipped = []
+
         # get files list
 
         source_files = self.get_source_files(root_folder, folders_to_search)
 
         # get source index
         self.source_mhl_list = self.get_source_indexes(root_folder)
-        source_index = self.list_of_mhls_to_dict(self.source_mhl_list)
+        source_index = self.list_of_mhls_to_dict(self.source_mhl_list, is_source=True)
 
         # get backup MHLs, group them,  and make a backup object from each group
         backup_mhl_list = self.get_backup_indexes(root_folder)
+        # TODO detect more backup name types
         backup_mhl_groups = separate_primary_and_secondary(backup_mhl_list)
 
         for ii, group_list in enumerate(backup_mhl_groups):
-            group_dict = self.list_of_mhls_to_dict(group_list)
+            group_dict = self.list_of_mhls_to_dict(group_list, is_source=False)
             mhls = [trim_path_relative(m, self.folders_to_search) for m in self.source_mhl_list]
             b = Backup(os.path.basename(group_list[0]), group_dict, source_index, source_files, mhls)
             self.backups.append(b)
@@ -46,6 +57,7 @@ class BackupVerifier:
 
             if not os.path.exists(os.path.join(root_folder, folder_to_search)):
                 self.manager.log(f'{folder_to_search} not found', 4)
+                self.source_folders_skipped.append(folder_to_search)
 
             else:
                 for root, dirs, files in os.walk(os.path.join(root_folder, folder_to_search)):
@@ -83,6 +95,9 @@ class BackupVerifier:
 
                     file = trim_path_relative(os.path.join(str(root), str(file)), folders_to_search)
 
+                    # TODO skip more hidden files
+                    # TODO report list of hidden files
+
                     if file.endswith(".DS_Store"):
                         self.manager.log(f"Skipped hidden file {file}", 1)
 
@@ -91,12 +106,19 @@ class BackupVerifier:
 
         return file_list
 
-    def list_of_mhls_to_dict(self, mhl_list: []):
+    def list_of_mhls_to_dict(self, mhl_list: [], is_source=True):
         dictionary = {}
 
         for mhl in mhl_list:
             self.manager.log(f'Loading MHL {os.path.basename(mhl)} - this might take a second...', 1)
-            dictionary.update(mhl_to_dict_fast(mhl))
+
+            if is_source:
+                dictionary.update(mhl_to_dict_fast(mhl, add_parent_folders=1))
+            else:
+                dictionary.update(
+                    mhl_to_dict_fast(mhl, trim_top_levels=self.source_i_trim_top_levels,
+                                     root_pattern=self.source_i_root_pattern,
+                                     add_parent_folders=self.source_i_add_parent_folders))
 
         return dictionary
 
@@ -364,47 +386,46 @@ class Backup:
         self.checks_run["Source index vs source files"] = check_passed
 
 
-def mhl_to_dict_fast(mhl_file_path: str):
+def mhl_to_dict_fast(mhl_file_path: str, add_parent_folders=0, trim_top_levels=0, root_pattern=r''):
+
     dict_of_files_and_sizes = {}
 
     with open(mhl_file_path, "r") as file_handler:
         contents = file_handler.readlines()
 
-    add_roll_to_path = ""
+    parent_folder = os.path.basename(os.path.dirname(mhl_file_path))
     volumes_string = ''
 
     for index, line in enumerate(contents):
 
         line = line.strip()
 
-        # detect whether this is a YoYotta MHL
-        if line.startswith("<username>"):
-
-            if "YoYotta" not in line:
-                # get the roll folder name
-                add_roll_to_path = os.path.basename(os.path.dirname(mhl_file_path))
-            else:
-                add_roll_to_path = ""
-
-        elif line.startswith("<file>"):
+        if line.startswith("<file>"):
 
             # remove the tags from the lines and save them to variables
             file_path = remove_xml_tag(line, "file")
             file_size = remove_xml_tag(contents[index + 1], "size")
 
-            # add the roll folder name if needed
-            if add_roll_to_path:
-                file_path = os.path.sep + os.path.join(add_roll_to_path, file_path)
+            split_file_path = [s for s in os.path.normpath(file_path).split(os.path.sep) if s]
 
-            # head trim the path down to below Camera_Media or Sound_Media
+            # add parent folders from the MHL's path
+            if add_parent_folders:
+                split_mhl_file_path = os.path.normpath(os.path.dirname(mhl_file_path)).split(os.path.sep)
+                split_file_path = split_mhl_file_path[-add_parent_folders:] + split_file_path
 
-            file_path = trim_path_relative(file_path, ['Camera_Media', 'Sound_Media'])
+            # trim off n levels of the top of the path
+            else:
+                if root_pattern:
+                    for path_element_index, path_element in enumerate(split_file_path):
 
-            if file_path.startswith("/Volumes/"):
-                if not volumes_string:
-                    volumes_string = re.findall(r'^/Volumes/\w+', file_path)[0]
+                        if re.search(root_pattern, path_element):
+                            split_file_path = split_file_path[path_element_index + 1:]
+                            break
 
-                file_path = file_path.replace(volumes_string, "", 1)
+                if trim_top_levels:
+                    split_file_path = split_file_path[trim_top_levels:]
+
+            file_path = os.path.sep + os.path.join(*split_file_path)
 
             # add this file to the dictionary
             dict_of_files_and_sizes[file_path] = file_size
@@ -429,14 +450,20 @@ def trim_path_relative(file_path: str, possible_roots: list) -> str:
 def separate_primary_and_secondary(mhl_list):
     groups = []
 
-    primary = [f for f in mhl_list if (int(f[-5]) % 2 != 0)]
-    secondary = [f for f in mhl_list if (int(f[-5]) % 2 == 0)]
+    if mhl_list[0].isnumeric():
 
-    if len(primary):
-        groups.append(primary)
+        primary = [f for f in mhl_list if (int(f[-5]) % 2 != 0)]
+        secondary = [f for f in mhl_list if (int(f[-5]) % 2 == 0)]
 
-    if len(secondary):
-        groups.append(secondary)
+        if len(primary):
+            groups.append(primary)
+
+        if len(secondary):
+            groups.append(secondary)
+
+    else:
+        print("Could not split primary and secondary backups")
+        groups = [mhl_list]
 
     return groups
 
@@ -458,5 +485,7 @@ def print_colour(message, print_type):
 
 
 if __name__ == '__main__':
-    my_verifier = BackupVerifier("/Users/christykail/Sample footage/Test backups/Day 001")
-    my_verifier.run_checks()
+
+    verifier = BackupVerifier('/Volumes/NVME/WAKEFIELD_MHLs/211208_WAKEFIELD_PU001', source_i_root_pattern=r'_hde|^wav$')
+    verifier.run_checks(file_checks=False)
+    report, _ = verifier.write_report(skip_writing_file=True)
