@@ -25,3 +25,13 @@ Skip hidden files, but also log them
 Report if any requested source folders were Skipped
 Allow different source folders to be scanned
 Be more flexible about where to trim LTO file structure
+
+
+Netflix tape format:
+/Volumes/NET001/Project/Camera_Media/Roll_Name
+/Volumes/NET001/Project/Sound_Media/Roll_Name
+
+Fox tape format:
+/Volumes/FOX001/Date/ARRIRAW/Roll_Name
+/Volumes/FOX001/Date/RED_R3D/Roll_Name
+/Volumes/FOX001/Date/RED_R3D/Roll_Name

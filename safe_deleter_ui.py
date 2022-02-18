@@ -1,15 +1,36 @@
 import os
 import tkinter as tk
+from tkinter import ttk
 from tkinter import filedialog
-import backup_verifier
+import mhl_backup_comparison
+import re
 
 
-class App(tk.Tk):
+def make_preset_dict() -> dict:
+    preset_dict = {
+
+        "Test": ("", 8),
+        "Root": ("", 2),
+        "Netflix": ("", 5),
+        "Fox Searchlight": ("", 4),
+        "Wakefield": (r'_hde|^wav$', 0)
+    }
+
+    return preset_dict
+
+
+class BackupVerifierApp(tk.Tk):
 
     def __init__(self):
         super().__init__()
 
         self.console_lines = 1
+
+        self.presets = make_preset_dict()
+
+        self.setup_ui()
+
+    def setup_ui(self):
 
         self.title("Cinelab Film & Digital - Safe Deleter")
 
@@ -36,21 +57,42 @@ class App(tk.Tk):
         # check files
         self.var_files = tk.BooleanVar()
         self.var_files.set(True)
-        self.check_files = tk.Checkbutton(self, text="Check files as well as indexes", variable=self.var_files, onvalue=True, offvalue=False)
-        self.check_files['state'] = 'disabled'
+        self.check_files = tk.Checkbutton(self, text="Check files as well as indexes", variable=self.var_files,
+                                          onvalue=True, offvalue=False)
         self.check_files.grid(column=1, row=2, columnspan=2, padx=20, pady=5)
 
+        # look for primary and secondary backups
+        self.var_primary_secondary = tk.BooleanVar()
+        self.var_primary_secondary.set(True)
+        self.check_primary_secondary = tk.Checkbutton(self, text="Search for primary and secondary backups",
+                                                      variable=self.var_files,
+                                                      onvalue=True, offvalue=False)
+        self.check_primary_secondary.grid(column=1, row=2, columnspan=2, padx=20, pady=5)
 
+        # folders to search
+        self.label_folders = tk.Label(self, text="Source folders to search")
+        self.label_folders.grid(column=1, row=3, sticky="E")
+        self.entry_folders = tk.Entry(self)
+        self.entry_folders.insert(0, "Camera_Media, Sound_Media")
+        self.entry_folders.grid(column=2, row=3, sticky="EW")
 
-        # label
+        # LTO preset
+        self.label_lto_preset = tk.Label(self, text="LTO layout type")
+        self.label_lto_preset.grid(column=1, row=5, sticky="E")
+        lto_preset_list = list(self.presets.keys())
+        self.combo_lto_preset = ttk.Combobox(self, values=lto_preset_list, width=20, state="readonly")
+        self.combo_lto_preset.current(1)
+        self.combo_lto_preset.grid(column=2, row=5, sticky="W")
+
+        # info label
         self.label_info = tk.Label(self, text="Select a day folder to verify", font=('LucidaGrande.ttc', 25))
-        self.label_info.grid(column=0, row=3, columnspan=4, padx=20, pady=5)
+        self.label_info.grid(column=0, row=10, columnspan=4, padx=20, pady=5)
         self.text_colour = self.label_info.cget("fg")
 
         # console
         self.text_console = tk.Text(self, width=75, takefocus=0, highlightthickness=0, padx=5, pady=5,
                                     font='LucidaGrande.ttc')
-        self.text_console.grid(column=0, row=4, columnspan=4, sticky="NEW", pady=10, padx=10)
+        self.text_console.grid(column=0, row=11, columnspan=4, sticky="NEW", pady=10, padx=10)
         self.text_console['state'] = 'disabled'
 
     def load(self):
@@ -59,18 +101,41 @@ class App(tk.Tk):
 
         self.reset_log()
 
-        self.label_info['text'] = os.path.basename(folder)
-
-        try:
-            my_verifier = backup_verifier.BackupVerifier(folder, manager=self, source_i_root_pattern=r'_hde|wav$')
-
-        except Exception as error:
-            self.log(f"Error occurred when scanning folder: {error}", 4)
+        if not os.path.isdir(folder):
+            self.label_info['text'] = "Invalid folder"
             return
 
-        # TODO fix this so we we can toggle it properly
-        my_verifier.run_checks(file_checks=False)
-        report, passed = my_verifier.write_report()
+        self.label_info['text'] = os.path.basename(folder)
+
+        folders_to_search = [i.strip() for i in self.entry_folders.get().split(",")]
+
+        bu_root_pattern, trim_top_levels = self.presets[self.combo_lto_preset.get()]
+
+        if bu_root_pattern:
+            try:
+                re.compile(bu_root_pattern)
+            except re.error:
+                self.log(f"Not a valid matching pattern: {bu_root_pattern}", 4)
+                return
+        try:
+            my_verifier = mhl_backup_comparison.MHLChecker(folder,
+                                                           backup_pattern=bu_root_pattern,
+                                                           source_folders=folders_to_search,
+                                                           backup_trim=trim_top_levels,
+                                                           dual_backups=self.var_primary_secondary.get())
+
+        except mhl_backup_comparison.VerifierException as error:
+            self.log(f"Error in verifier: {error}\nEnding - checks did not complete", 4)
+            return
+
+        passed = my_verifier.checker_passed
+        report = my_verifier.checker_report
+
+        if passed:
+            self.log(report, 2)
+
+        else:
+            self.log(report, 4)
 
         if passed:
             self.label_info.config(fg="green")
@@ -90,24 +155,26 @@ class App(tk.Tk):
 
     def log(self, string: str, log_level: int):
 
-        self.console_lines = self.text_console.get("1.0", 'end').count('\n')+1
+        line_count = string.count('\n') + 1
+
+        self.console_lines = self.text_console.get("1.0", 'end').count('\n') + 1
         self.text_console['state'] = 'normal'
         self.text_console.insert(tk.END, "\n" + string)
 
         if log_level == 0 or log_level == 1:
-            self.text_console.tag_add("Normal", f'{self.console_lines}.0', f'{self.console_lines}.end')
+            self.text_console.tag_add("Normal", f'{self.console_lines}.0', f'{self.console_lines+line_count}.end')
 
         elif log_level == 2:
-            self.text_console.tag_add("Good", f'{self.console_lines}.0', f'{self.console_lines}.end')
+            self.text_console.tag_add("Good", f'{self.console_lines}.0', f'{self.console_lines+line_count}.end')
             self.text_console.tag_config("Good", foreground="green")
 
         elif log_level == 3:
-            self.text_console.tag_add("Warning", f'{self.console_lines}.0', f'{self.console_lines}.end')
+            self.text_console.tag_add("Warning", f'{self.console_lines}.0', f'{self.console_lines+line_count}.end')
             self.text_console.tag_config("Warning", foreground="#ff9200")
 
         elif log_level == 4:
 
-            self.text_console.tag_add("Fail", f'{self.console_lines}.0', f'{self.console_lines}.end')
+            self.text_console.tag_add("Fail", f'{self.console_lines}.0', f'{self.console_lines+line_count}.end')
             self.text_console.tag_config("Fail", foreground="red")
 
         self.text_console.see('end')
@@ -118,5 +185,5 @@ class App(tk.Tk):
 
 
 if __name__ == '__main__':
-    app = App()
+    app = BackupVerifierApp()
     app.mainloop()

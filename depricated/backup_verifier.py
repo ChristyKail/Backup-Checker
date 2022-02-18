@@ -6,8 +6,8 @@ from datetime import datetime
 
 class BackupVerifier:
 
-    def __init__(self, root_folder: str, folders_to_search=None, manager=None, source_i_root_pattern=r'_Media$',
-                 source_i_trim_top_levels=0, source_i_add_parent_folders=0):
+    def __init__(self, root_folder: str, folders_to_search=None, manager=None, bu_root_pattern=r'_Media$',
+                 bu_trim_top_levels=0, source_i_add_parent_folders=0, check_secondary=True):
 
         if folders_to_search is None:
             folders_to_search = ["Camera_Media", "Sound_Media"]
@@ -23,11 +23,10 @@ class BackupVerifier:
         self.verified = False
 
         # options for loading source MHLs
-        self.source_i_root_pattern = source_i_root_pattern
-        self.source_i_trim_top_levels = source_i_trim_top_levels
+        self.bu_root_pattern = bu_root_pattern
+        self.bu_trim_top_levels = bu_trim_top_levels
         self.source_i_add_parent_folders = source_i_add_parent_folders
 
-        # TODO report this
         self.source_folders_skipped = []
 
         # get files list
@@ -41,11 +40,15 @@ class BackupVerifier:
         # get backup MHLs, group them,  and make a backup object from each group
         backup_mhl_list = self.get_backup_indexes(root_folder)
         # TODO detect more backup name types
-        backup_mhl_groups = separate_primary_and_secondary(backup_mhl_list)
+
+        if check_secondary:
+            backup_mhl_groups = separate_primary_and_secondary(backup_mhl_list)
+        else:
+            backup_mhl_groups = [backup_mhl_list]
 
         for ii, group_list in enumerate(backup_mhl_groups):
             group_dict = self.list_of_mhls_to_dict(group_list, is_source=False)
-            mhls = [trim_path_relative(m, self.folders_to_search) for m in self.source_mhl_list]
+            mhls = [trim_path_relative(str(m), self.folders_to_search) for m in self.source_mhl_list]
             b = Backup(os.path.basename(group_list[0]), group_dict, source_index, source_files, mhls)
             self.backups.append(b)
 
@@ -56,8 +59,7 @@ class BackupVerifier:
         for folder_to_search in self.folders_to_search:
 
             if not os.path.exists(os.path.join(root_folder, folder_to_search)):
-                self.manager.log(f'{folder_to_search} not found', 4)
-                self.source_folders_skipped.append(folder_to_search)
+                raise NotADirectoryError(root_folder)
 
             else:
                 for root, dirs, files in os.walk(os.path.join(root_folder, folder_to_search)):
@@ -95,9 +97,6 @@ class BackupVerifier:
 
                     file = trim_path_relative(os.path.join(str(root), str(file)), folders_to_search)
 
-                    # TODO skip more hidden files
-                    # TODO report list of hidden files
-
                     if file.endswith(".DS_Store"):
                         self.manager.log(f"Skipped hidden file {file}", 1)
 
@@ -107,6 +106,7 @@ class BackupVerifier:
         return file_list
 
     def list_of_mhls_to_dict(self, mhl_list: [], is_source=True):
+
         dictionary = {}
 
         for mhl in mhl_list:
@@ -116,8 +116,8 @@ class BackupVerifier:
                 dictionary.update(mhl_to_dict_fast(mhl, add_parent_folders=1))
             else:
                 dictionary.update(
-                    mhl_to_dict_fast(mhl, trim_top_levels=self.source_i_trim_top_levels,
-                                     root_pattern=self.source_i_root_pattern,
+                    mhl_to_dict_fast(mhl, trim_top_levels=self.bu_trim_top_levels,
+                                     root_pattern=self.bu_root_pattern,
                                      add_parent_folders=self.source_i_add_parent_folders))
 
         return dictionary
@@ -137,11 +137,6 @@ class BackupVerifier:
             backup.quick_check()
             backup.source_i_vs_backup_i()
 
-            if file_checks:
-                backup.source_f_vs_backup_i()
-                backup.source_f_vs_source_i()
-                backup.source_i_vs_source_f()
-
             if backup.checks_passed(count=check_count) is False:
                 passed = False
 
@@ -152,13 +147,11 @@ class BackupVerifier:
         passed = True
 
         # report and log number of MHLs
-        mhl_info = f'Backups checked: {len(self.backups)}'
+        mhl_count = f'Backups checked: {len(self.backups)}'
 
-        self.manager.log(mhl_info, 1)
-        if len(self.backups) < 2:
-            self.manager.log("Only 1 backup was verified", 3)
+        self.manager.log(mhl_count, 1)
 
-        report_string = mhl_info + '\n'
+        report_string = mhl_count + '\n'
 
         for backup in self.backups:
             report_string = report_string + '\t' + backup.backup_name + '\n'
@@ -227,10 +220,6 @@ class Backup:
 
         self.source_i_missing_in_backup_i = []
         self.source_i_wrong_in_backup_i = []
-        self.source_f_missing_in_backup_i = []
-
-        self.source_f_missing_in_source_i = []
-        self.source_i_missing_in_source_f = []
 
     def checks_passed(self, count=5):
 
@@ -258,12 +247,6 @@ class Backup:
 
             report_list.append("\n")
 
-            report_list.append("Checks run:\n")
-            for check, result in self.checks_run.items():
-                report_list.append(f'\t{check}\n')
-
-            report_list.append("\n")
-
             # list all the MHLs
             report_list.append(f'Sources: {len(verifier.source_mhl_list)}\n')
             for line in verifier.source_mhl_list:
@@ -275,21 +258,8 @@ class Backup:
             for line in self.source_i_missing_in_backup_i:
                 report_list.append(f"\t{line}\n")
 
-            report_list.append(f'Files missing from backup index: {len(self.source_f_missing_in_backup_i)}\n')
-            for line in self.source_f_missing_in_backup_i:
-                report_list.append(f"\t{line}\n")
-
             report_list.append(f'Files with wrong file size on the backup: {len(self.source_i_wrong_in_backup_i)}\n')
             for line in self.source_i_wrong_in_backup_i:
-                report_list.append(f"\t{line}\n")
-
-            report_list.append(f'Files not in source index: {len(self.source_f_missing_in_source_i)}\n')
-            for line in self.source_f_missing_in_source_i:
-                report_list.append(f"\t{line}\n")
-
-            report_list.append(
-                f'Source indexes that are missing source files: {len(self.source_i_missing_in_source_f)}\n')
-            for line in self.source_i_missing_in_source_f:
                 report_list.append(f"\t{line}\n")
 
             return ''.join(report_list), self.checks_passed()
@@ -340,61 +310,18 @@ class Backup:
 
         self.checks_run["Source index vs backup index, including size"] = check_passed
 
-    def source_f_vs_backup_i(self):
 
-        """check if every existing file is in the backup index"""
+class VerifierException(Exception):
 
-        check_passed = True
-
-        for source_f in self.source_files:
-            if source_f not in self.backup_index.keys():
-                self.source_f_missing_in_backup_i.append(source_f)
-                check_passed = False
-
-        self.checks_run["Source files vs backup index"] = check_passed
-
-    def source_f_vs_source_i(self):
-
-        """check if every existing file is in the source index - have any files been added without a source index?"""
-
-        check_passed = True
-
-        mhl_count = 0
-        for source_f in self.source_files:
-
-            if source_f in self.source_mhls:
-                mhl_count += 1
-                continue
-
-            if source_f not in self.source_index.keys():
-                self.source_f_missing_in_source_i.append(source_f)
-                check_passed = False
-
-        self.checks_run["Source files vs source index"] = check_passed
-
-    def source_i_vs_source_f(self):
-
-        """check if every source index is in the existing files - have any files been deleted since offload?"""
-
-        check_passed = True
-
-        for source_i in self.source_index.keys():
-            if source_i not in self.source_files:
-                self.source_i_missing_in_source_f.append(source_i)
-                check_passed = False
-
-        self.checks_run["Source index vs source files"] = check_passed
+    def __init__(self, message="Verifier error"):
+        super().__init__(message)
 
 
 def mhl_to_dict_fast(mhl_file_path: str, add_parent_folders=0, trim_top_levels=0, root_pattern=r''):
-
     dict_of_files_and_sizes = {}
 
     with open(mhl_file_path, "r") as file_handler:
         contents = file_handler.readlines()
-
-    parent_folder = os.path.basename(os.path.dirname(mhl_file_path))
-    volumes_string = ''
 
     for index, line in enumerate(contents):
 
@@ -423,7 +350,13 @@ def mhl_to_dict_fast(mhl_file_path: str, add_parent_folders=0, trim_top_levels=0
                             break
 
                 if trim_top_levels:
+                    print(split_file_path)
+
+                    if trim_top_levels >= len(split_file_path):
+                        raise VerifierException("LTO path trimmed to less than 1! Are you using the wrong preset?")
+
                     split_file_path = split_file_path[trim_top_levels:]
+                    print(split_file_path)
 
             file_path = os.path.sep + os.path.join(*split_file_path)
 
@@ -448,9 +381,10 @@ def trim_path_relative(file_path: str, possible_roots: list) -> str:
 
 
 def separate_primary_and_secondary(mhl_list):
+
     groups = []
 
-    if mhl_list[0].isnumeric():
+    if mhl_list[0][-5].isnumeric():
 
         primary = [f for f in mhl_list if (int(f[-5]) % 2 != 0)]
         secondary = [f for f in mhl_list if (int(f[-5]) % 2 == 0)]
@@ -485,7 +419,7 @@ def print_colour(message, print_type):
 
 
 if __name__ == '__main__':
-
-    verifier = BackupVerifier('/Volumes/NVME/WAKEFIELD_MHLs/211208_WAKEFIELD_PU001', source_i_root_pattern=r'_hde|^wav$')
-    verifier.run_checks(file_checks=False)
-    report, _ = verifier.write_report(skip_writing_file=True)
+    my_verifier = BackupVerifier('/Volumes/NVME/WAKEFIELD_MHLs/211208_WAKEFIELD_PU001',
+                                 bu_root_pattern=r'_hde|^wav$')
+    my_verifier.run_checks(file_checks=False)
+    report, _ = my_verifier.write_report(skip_writing_file=True)

@@ -1,5 +1,5 @@
 import unittest
-import backup_verifier
+from depricated import backup_verifier
 
 
 class TestBackup(unittest.TestCase):
