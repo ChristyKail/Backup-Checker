@@ -4,7 +4,7 @@ import re
 
 class MHLChecker:
 
-    def __init__(self, root_folder, source_folders=None, backup_pattern=r'_Media$', backup_trim=0, source_add_parents=0,
+    def __init__(self, root_folder, source_folders=None, backup_pattern="", backup_trim=0,
                  dual_backups=True):
 
         if not source_folders:
@@ -12,10 +12,13 @@ class MHLChecker:
         else:
             self.source_folders = source_folders
 
+        self.checks_run = False
+        self.checker_passed = False
+        self.checker_report = []
+
         self.root_folder = root_folder
         self.backup_pattern = backup_pattern
         self.backup_trim = backup_trim
-        self.source_add_parents = source_add_parents
 
         self.backup_mhls = self.get_backup_mhls()
         self.source_mhls = self.get_source_mhls()
@@ -28,7 +31,9 @@ class MHLChecker:
 
         self.backups = self.create_backups_from_mhl_groups()
 
-        self.checker_passed, self.checker_report = self.run_checks()
+        self.checker_passed = self.run_checks()
+
+        self.write_report_file()
 
     def get_source_mhls(self):
 
@@ -39,7 +44,9 @@ class MHLChecker:
         for this_source_folder in self.source_folders:
 
             if not os.path.exists(os.path.join(self.root_folder, this_source_folder)):
-                print_colour(f"{this_source_folder} folder is not present", PrintColours.WARNING)
+                message = f"{this_source_folder} folder is not present"
+                print_colour(message, PrintColours.WARNING)
+                self.checker_report.append(message)
 
             else:
                 for root, dirs, files in os.walk(os.path.join(self.root_folder, this_source_folder)):
@@ -47,20 +54,22 @@ class MHLChecker:
                         if str(file).endswith(".mhl"):
                             file_list.append(os.path.join(root, file))
 
+        self.checker_report += ['\n'] + [os.path.basename(str(x)) for x in file_list]
+
         if not file_list:
-            raise VerifierException("No sources found in specified source folders")
+            raise MHLCheckerException("No sources found in specified source folders")
 
         return file_list
 
     def get_backup_mhls(self):
 
-        print(f"Scanning folder {os.path.basename(self.root_folder)} for backups")
+        print_colour(f"Scanning folder {os.path.basename(self.root_folder)} for backups", PrintColours.UNDERLINE)
 
         file_list = [os.path.join(self.root_folder, file) for file in os.listdir(self.root_folder) if
                      file.endswith(".mhl")]
 
         if not file_list:
-            raise VerifierException("No backups found in specified folder")
+            raise MHLCheckerException("No backups found in specified folder")
 
         return file_list
 
@@ -70,7 +79,7 @@ class MHLChecker:
 
         mhl: str
         for mhl in self.source_mhls:
-            print(f"Loading source {os.path.basename(mhl)}")
+            print(f"Lading source {os.path.basename(mhl)}")
 
             dictionary.update(mhl_to_dict(mhl, add_parent_folders=1))
 
@@ -118,19 +127,46 @@ class MHLChecker:
         checker_report = []
 
         for backup in self.backups:
+
             backup.compare_all()
 
-            backup_passed, backup_report = backup.report()
+            backup_passed = backup.report_backup()
 
-            checker_report.append(backup_report)
+            checker_report = checker_report + ["\n"] + backup.backup_report
+
+            print()
 
             if backup_passed:
-                print_colour(backup_report, PrintColours.OKGREEN)
+                print_colour('\n'.join(backup.backup_report), PrintColours.OKGREEN)
             else:
-                print_colour(backup_report, PrintColours.FAIL)
+                print_colour('\n'.join(backup.backup_report), PrintColours.FAIL)
                 checker_passed = False
 
-        return checker_passed, "\n\n".join(checker_report)
+            print()
+
+            self.checks_run = True
+
+        self.checker_report += checker_report
+
+        return checker_passed
+
+    def write_report_file(self):
+
+        if not self.checks_run:
+            print_colour("Checks not yet run", PrintColours.WARNING)
+
+        if self.checker_passed:
+            file_name = f'{os.path.basename(self.root_folder)} - checks PASSED'
+            # set_label(self.root_folder, 'green')
+        else:
+            file_name = f'{os.path.basename(self.root_folder)} - checks FAILED'
+            # set_label(self.root_folder, 'red')
+
+        file_path = os.path.join(self.root_folder, file_name)
+
+        with open(file_path, "w") as file_handler:
+
+            file_handler.write("\n".join(self.checker_report))
 
     class MHLBackup:
 
@@ -141,6 +177,7 @@ class MHLChecker:
             self.name = " ".join([os.path.basename(x).strip(".mhl") for x in backups])
 
             self.checked = False
+            self.backup_report = []
 
             self.backups = backups
 
@@ -149,8 +186,6 @@ class MHLChecker:
 
             self.missing_files = []
             self.wrong_files = []
-
-            self.report_string = ''
 
         def backups_to_dict(self):
 
@@ -188,7 +223,7 @@ class MHLChecker:
 
             return errors
 
-        def report(self):
+        def report_backup(self):
 
             report = [self.name]
 
@@ -206,24 +241,22 @@ class MHLChecker:
                     report = report + ["Missing files"] + self.missing_files
                 else:
                     report = report + ["Missing files"] + self.missing_files[:cutoff] + \
-                             [f"and {len(self.missing_files)-cutoff} more"]
+                             [f"and {len(self.missing_files) - cutoff} more"]
 
                 if len(self.wrong_files) <= cutoff:
                     report = report + ["Mismatched files"] + self.wrong_files
                 else:
                     report = report + ["Mismatched files"] + self.wrong_files[:cutoff] + \
-                             [f"and {len(self.wrong_files)-cutoff} more"]
+                             [f"and {len(self.wrong_files) - cutoff} more"]
 
                 passed = False
 
-            return passed, "\n".join(report)
+            self.backup_report = report
 
-        def add_string_to_report(self, string):
-
-            self.report_string = self.report_string + "\n" + string
+            return passed
 
 
-class VerifierException(Exception):
+class MHLCheckerException(Exception):
 
     def __init__(self, message="Verifier error"):
         super().__init__(message)
@@ -264,7 +297,7 @@ def mhl_to_dict(mhl_file_path: str, add_parent_folders=0, trim_top_levels=0, roo
                 if trim_top_levels:
 
                     if trim_top_levels >= len(split_file_path):
-                        raise VerifierException("LTO path trimmed to less than 1! Are you using the wrong preset?")
+                        raise MHLCheckerException("LTO path trimmed to less than 1! Are you using the wrong preset?")
 
                     split_file_path = split_file_path[trim_top_levels:]
 
@@ -297,7 +330,33 @@ def print_colour(message, print_type):
 
 
 if __name__ == '__main__':
-    MHLChecker("/Volumes/CK_SSD/Sample footage/Test backups/0_Known_Good")
-    MHLChecker("/Volumes/CK_SSD/Sample footage/Test backups/1_Missing_Backup_Roll")
-    MHLChecker("/Volumes/CK_SSD/Sample footage/Test backups/2_Wrong_File_Size")
-    MHLChecker("/Volumes/CK_SSD/Sample footage/Test backups/TARTAN DAY 24")
+
+    debug = True
+
+    if debug:
+
+        MHLChecker("/Volumes/CK_SSD/Sample footage/Test backups/0_Known_Good", backup_trim=8)
+        MHLChecker("/Volumes/CK_SSD/Sample footage/Test backups/1_Missing_Backup_Roll", backup_trim=8)
+        MHLChecker("/Volumes/CK_SSD/Sample footage/Test backups/2_Wrong_File_Size", backup_trim=8)
+
+    else:
+
+        folder = input("Drag day folder here...")
+        folder = folder.replace("\\", "")
+
+        preset_dict = {
+
+            "Test": ("", 8),
+            "Root": ("", 2),
+            "Netflix": ("", 5),
+            "Fox Searchlight": ("", 4),
+            "Wakefield": (r'_hde|^wav$', 0)
+        }
+
+        for key in preset_dict.keys():
+            print(key)
+
+        preset = input("Type one of the above presets")
+
+        if preset in list(preset_dict.keys()):
+            MHLChecker(folder, backup_pattern=preset_dict[preset][0], backup_trim=preset_dict[preset][1])

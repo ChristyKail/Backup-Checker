@@ -106,6 +106,7 @@ class BackupVerifierApp(tk.Tk):
             return
 
         self.label_info['text'] = os.path.basename(folder)
+        self.update()
 
         folders_to_search = [i.strip() for i in self.entry_folders.get().split(",")]
 
@@ -124,12 +125,12 @@ class BackupVerifierApp(tk.Tk):
                                                            backup_trim=trim_top_levels,
                                                            dual_backups=self.var_primary_secondary.get())
 
-        except mhl_backup_comparison.VerifierException as error:
+        except mhl_backup_comparison.MHLCheckerException as error:
             self.log(f"Error in verifier: {error}\nEnding - checks did not complete", 4)
             return
 
         passed = my_verifier.checker_passed
-        report = my_verifier.checker_report
+        report = '\n'.join(my_verifier.checker_report)
 
         if passed:
             self.log(report, 2)
