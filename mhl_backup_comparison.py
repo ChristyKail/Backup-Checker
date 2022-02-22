@@ -1,11 +1,12 @@
 import os
 import re
+from datetime import datetime
 
 
 class MHLChecker:
 
     def __init__(self, root_folder, source_folders=None, backup_pattern="", backup_trim=0,
-                 dual_backups=True):
+                 dual_backups=True, add_roll_folder=1):
 
         if not source_folders:
             self.source_folders = ["Camera_Media", "Sound_Media"]
@@ -19,6 +20,7 @@ class MHLChecker:
         self.root_folder = root_folder
         self.backup_pattern = backup_pattern
         self.backup_trim = backup_trim
+        self.add_parent_folders = add_roll_folder
 
         self.backup_mhls = self.get_backup_mhls()
         self.source_mhls = self.get_source_mhls()
@@ -81,7 +83,7 @@ class MHLChecker:
         for mhl in self.source_mhls:
             print(f"Lading source {os.path.basename(mhl)}")
 
-            dictionary.update(mhl_to_dict(mhl, add_parent_folders=1))
+            dictionary.update(mhl_to_dict(mhl, add_parent_folders=self.add_parent_folders))
 
         return dictionary
 
@@ -90,7 +92,7 @@ class MHLChecker:
         groups = []
 
         if not self.dual_backups:
-            return self.backup_mhls
+            return [self.backup_mhls]
 
         if self.backup_mhls[0][-5].isnumeric():
 
@@ -152,14 +154,17 @@ class MHLChecker:
 
     def write_report_file(self):
 
+        now = datetime.now()
+        current_time = now.strftime("%Y%m%d_%H%M%S")
+
         if not self.checks_run:
             print_colour("Checks not yet run", PrintColours.WARNING)
 
         if self.checker_passed:
-            file_name = f'{os.path.basename(self.root_folder)} - checks PASSED'
+            file_name = f'{os.path.basename(self.root_folder)} - checks PASSED - {current_time}.txt'
             # set_label(self.root_folder, 'green')
         else:
-            file_name = f'{os.path.basename(self.root_folder)} - checks FAILED'
+            file_name = f'{os.path.basename(self.root_folder)} - checks FAILED - {current_time}.txt'
             # set_label(self.root_folder, 'red')
 
         file_path = os.path.join(self.root_folder, file_name)
@@ -178,6 +183,8 @@ class MHLChecker:
 
             self.checked = False
             self.backup_report = []
+
+            self.files_checked = 0
 
             self.backups = backups
 
@@ -208,6 +215,10 @@ class MHLChecker:
 
             for source_file, source_size in self.source_dictionary.items():
 
+                if not self.files_checked:
+
+                    print(f'Source index example: {source_file}')
+
                 if source_file in self.backup_dictionary.keys():
 
                     if source_size == self.backup_dictionary[source_file]:
@@ -219,13 +230,15 @@ class MHLChecker:
                 else:
                     self.missing_files.append(source_file)
 
+                self.files_checked += 1
+
             self.checked = True
 
             return errors
 
         def report_backup(self):
 
-            report = [self.name]
+            report = [self.name, f'{self.files_checked} files checked']
 
             if not self.missing_files and not self.wrong_files:
 
@@ -335,9 +348,7 @@ if __name__ == '__main__':
 
     if debug:
 
-        MHLChecker("/Volumes/CK_SSD/Sample footage/Test backups/0_Known_Good", backup_trim=8)
-        MHLChecker("/Volumes/CK_SSD/Sample footage/Test backups/1_Missing_Backup_Roll", backup_trim=8)
-        MHLChecker("/Volumes/CK_SSD/Sample footage/Test backups/2_Wrong_File_Size", backup_trim=8)
+        MHLChecker("/Volumes/NVME/WS LTO", backup_trim=4, add_roll_folder=0, dual_backups=False)
 
     else:
 
