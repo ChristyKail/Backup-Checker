@@ -13,7 +13,8 @@ def make_preset_dict() -> dict:
         "Root": ("", 2),
         "Netflix": ("", 5),
         "Fox Searchlight": ("", 4),
-        "Wakefield": (r'_hde|^wav$', 0)
+        "Wakefield": (r'_hde|^wav$', 0),
+        "Winston Sugar (3)": ('', 3)
     }
 
     return preset_dict

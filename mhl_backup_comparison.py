@@ -67,7 +67,13 @@ class MHLChecker:
 
         print_colour(f"Scanning folder {os.path.basename(self.root_folder)} for backups", PrintColours.UNDERLINE)
 
-        file_list = [os.path.join(self.root_folder, file) for file in os.listdir(self.root_folder) if
+        if os.path.isdir(os.path.join(self.root_folder, 'Verifier')):
+
+            folder_to_scan = os.path.join(self.root_folder, 'Verifier')
+        else:
+            folder_to_scan = self.root_folder
+
+        file_list = [os.path.join(folder_to_scan, file) for file in os.listdir(folder_to_scan) if
                      file.endswith(".mhl")]
 
         if not file_list:
@@ -348,7 +354,8 @@ if __name__ == '__main__':
 
     if debug:
 
-        MHLChecker("/Volumes/NVME/WS LTO", backup_trim=4, add_roll_folder=0, dual_backups=False)
+        MHLChecker("/Volumes/CK_SSD/Sample footage/Test backups/WS_SD_001", backup_trim=3, add_roll_folder=1,
+                   dual_backups=False, source_folders=['Scans'])
 
     else:
 
@@ -357,11 +364,12 @@ if __name__ == '__main__':
 
         preset_dict = {
 
-            "Test": ("", 8),
-            "Root": ("", 2),
-            "Netflix": ("", 5),
-            "Fox Searchlight": ("", 4),
-            "Wakefield": (r'_hde|^wav$', 0)
+            "Test (8)": ("", 8),
+            "Root (2)": ("", 2),
+            "Netflix (5)": ("", 5),
+            "Fox Searchlight (4)": ("", 4),
+            "Wakefield": (r'_hde|^wav$', 0),
+            "Winston Sugar (3)": ('', 3)
         }
 
         for key in preset_dict.keys():
