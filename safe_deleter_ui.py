@@ -6,20 +6,6 @@ import mhl_backup_comparison
 import re
 
 
-def make_preset_dict() -> dict:
-    preset_dict = {
-
-        "Test": ("", 8),
-        "Root": ("", 2),
-        "Netflix": ("", 5),
-        "Fox Searchlight": ("", 4),
-        "Wakefield": (r'_hde|^wav$', 0),
-        "Winston Sugar (3)": ('', 3)
-    }
-
-    return preset_dict
-
-
 class BackupVerifierApp(tk.Tk):
 
     def __init__(self):
@@ -27,7 +13,7 @@ class BackupVerifierApp(tk.Tk):
 
         self.console_lines = 1
 
-        self.presets = make_preset_dict()
+        self.presets = mhl_backup_comparison.load_presets('presets.csv')
 
         self.setup_ui()
 
@@ -54,28 +40,6 @@ class BackupVerifierApp(tk.Tk):
         # load
         self.btn_input = tk.Button(self, text="Select folder", command=self.load)
         self.btn_input.grid(column=1, row=1, columnspan=2, padx=20, pady=5)
-
-        # check files
-        self.var_files = tk.BooleanVar()
-        self.var_files.set(True)
-        self.check_files = tk.Checkbutton(self, text="Check files as well as indexes", variable=self.var_files,
-                                          onvalue=True, offvalue=False)
-        self.check_files.grid(column=1, row=2, columnspan=2, padx=20, pady=5)
-
-        # look for primary and secondary backups
-        self.var_primary_secondary = tk.BooleanVar()
-        self.var_primary_secondary.set(True)
-        self.check_primary_secondary = tk.Checkbutton(self, text="Search for primary and secondary backups",
-                                                      variable=self.var_files,
-                                                      onvalue=True, offvalue=False)
-        self.check_primary_secondary.grid(column=1, row=2, columnspan=2, padx=20, pady=5)
-
-        # folders to search
-        self.label_folders = tk.Label(self, text="Source folders to search")
-        self.label_folders.grid(column=1, row=3, sticky="E")
-        self.entry_folders = tk.Entry(self)
-        self.entry_folders.insert(0, "Camera_Media, Sound_Media")
-        self.entry_folders.grid(column=2, row=3, sticky="EW")
 
         # LTO preset
         self.label_lto_preset = tk.Label(self, text="LTO layout type")
@@ -109,22 +73,9 @@ class BackupVerifierApp(tk.Tk):
         self.label_info['text'] = os.path.basename(folder)
         self.update()
 
-        folders_to_search = [i.strip() for i in self.entry_folders.get().split(",")]
-
-        bu_root_pattern, trim_top_levels = self.presets[self.combo_lto_preset.get()]
-
-        if bu_root_pattern:
-            try:
-                re.compile(bu_root_pattern)
-            except re.error:
-                self.log(f"Not a valid matching pattern: {bu_root_pattern}", 4)
-                return
         try:
-            my_verifier = mhl_backup_comparison.MHLChecker(folder,
-                                                           backup_pattern=bu_root_pattern,
-                                                           source_folders=folders_to_search,
-                                                           backup_trim=trim_top_levels,
-                                                           dual_backups=self.var_primary_secondary.get())
+
+            my_verifier = mhl_backup_comparison.make_checker_from_preset(folder, self.combo_lto_preset.get(), self.presets)
 
         except mhl_backup_comparison.MHLCheckerException as error:
             self.log(f"Error in verifier: {error}\nEnding - checks did not complete", 4)

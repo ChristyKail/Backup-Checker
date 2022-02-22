@@ -1,5 +1,6 @@
 import os
 import re
+import csv
 from datetime import datetime
 
 
@@ -61,6 +62,8 @@ class MHLChecker:
         if not file_list:
             raise MHLCheckerException("No sources found in specified source folders")
 
+        file_list.sort()
+
         return file_list
 
     def get_backup_mhls(self):
@@ -79,6 +82,8 @@ class MHLChecker:
         if not file_list:
             raise MHLCheckerException("No backups found in specified folder")
 
+        file_list.sort()
+
         return file_list
 
     def sources_to_dict(self):
@@ -87,7 +92,7 @@ class MHLChecker:
 
         mhl: str
         for mhl in self.source_mhls:
-            print(f"Lading source {os.path.basename(mhl)}")
+            print(f"Loading source {os.path.basename(mhl)}")
 
             dictionary.update(mhl_to_dict(mhl, add_parent_folders=self.add_parent_folders))
 
@@ -222,7 +227,6 @@ class MHLChecker:
             for source_file, source_size in self.source_dictionary.items():
 
                 if not self.files_checked:
-
                     print(f'Source index example: {source_file}')
 
                 if source_file in self.backup_dictionary.keys():
@@ -332,6 +336,28 @@ def remove_xml_tag(string: str, tag_name: str):
     return string.replace(f'<{tag_name}>', "").replace(f'</{tag_name}>', "").strip()
 
 
+def load_presets(file_path):
+    with open(file_path, mode='r') as file_handler:
+        reader = csv.reader(file_handler)
+
+        dictionary = {row[0]: [row[1], int(row[2]), int(row[3]), int(row[4]), row[5:]] for row in reader}
+
+    return dictionary
+
+
+def make_checker_from_preset(root_folder, preset_name, preset_dict):
+    preset_list = preset_dict[preset_name]
+
+    my_verifier = MHLChecker(root_folder,
+                             backup_pattern=preset_list[0],
+                             backup_trim=preset_list[1],
+                             dual_backups=preset_list[2],
+                             add_roll_folder=preset_list[3],
+                             source_folders=[x for x in preset_list[4] if x])
+
+    return my_verifier
+
+
 class PrintColours:
     HEADER = '\033[95m'
     OKBLUE = '\033[94m'
@@ -354,23 +380,19 @@ if __name__ == '__main__':
 
     if debug:
 
-        MHLChecker("/Volumes/CK_SSD/Sample footage/Test backups/WS_SD_001", backup_trim=3, add_roll_folder=1,
-                   dual_backups=False, source_folders=['Scans'])
+        preset_dict = load_presets('presets.csv')
+        make_checker_from_preset("/Volumes/CK_SSD/Sample footage/Test backups/0_Known_Good", "Tests", preset_dict)
+        make_checker_from_preset("/Volumes/CK_SSD/Sample footage/Test backups/1_Missing_Backup_Roll", "Tests", preset_dict)
+        make_checker_from_preset("/Volumes/CK_SSD/Sample footage/Test backups/2_Wrong_File_Size", "Tests", preset_dict)
+        make_checker_from_preset("/Volumes/CK_SSD/Sample footage/Test backups/TARTAN DAY 24", "Tartan", preset_dict)
+        make_checker_from_preset("/Volumes/CK_SSD/Sample footage/Test backups/WS_SD_001", "Winston Sugar", preset_dict)
 
     else:
 
         folder = input("Drag day folder here...")
         folder = folder.replace("\\", "")
 
-        preset_dict = {
-
-            "Test (8)": ("", 8),
-            "Root (2)": ("", 2),
-            "Netflix (5)": ("", 5),
-            "Fox Searchlight (4)": ("", 4),
-            "Wakefield": (r'_hde|^wav$', 0),
-            "Winston Sugar (3)": ('', 3)
-        }
+        preset_dict = load_presets('presets.csv')
 
         for key in preset_dict.keys():
             print(key)
