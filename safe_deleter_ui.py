@@ -76,7 +76,7 @@ class BackupVerifierApp(tk.Tk):
 
             my_verifier = mhl_backup_comparison.make_checker_from_preset(folder, self.combo_lto_preset.get(), self.presets)
 
-        except mhl_backup_comparison.MHLCheckerException as error:
+        except mhl_backup_comparison.BackupCheckerException as error:
             self.log(f"Error in verifier: {error}\nEnding - checks did not complete", 4)
             return
 
