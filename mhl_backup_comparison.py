@@ -18,6 +18,8 @@ class MHLChecker:
         self.checker_passed = False
         self.checker_report = []
 
+        self.files_scanned = 0
+
         self.root_folder = root_folder
         self.backup_pattern = backup_pattern
         self.backup_trim = backup_trim
@@ -40,7 +42,7 @@ class MHLChecker:
 
     def get_source_mhls(self):
 
-        file_list = []
+        mhl_list = []
 
         print_colour(f"Scanning folder {os.path.basename(self.root_folder)} for sources", PrintColours.UNDERLINE)
 
@@ -54,17 +56,22 @@ class MHLChecker:
             else:
                 for root, dirs, files in os.walk(os.path.join(self.root_folder, this_source_folder)):
                     for file in files:
+
                         if str(file).endswith(".mhl"):
-                            file_list.append(os.path.join(root, file))
+                            mhl_list.append(os.path.join(root, file))
 
-        self.checker_report += ['\n'] + [os.path.basename(str(x)) for x in file_list]
+                        elif str(file) != '.DS_Store':
 
-        if not file_list:
+                            self.files_scanned += 1
+
+        self.checker_report += ['\n'] + [os.path.basename(str(x)) for x in mhl_list]
+
+        if not mhl_list:
             raise MHLCheckerException("No sources found in specified source folders")
 
-        file_list.sort()
+        mhl_list.sort()
 
-        return file_list
+        return mhl_list
 
     def get_backup_mhls(self):
 
@@ -76,15 +83,15 @@ class MHLChecker:
         else:
             folder_to_scan = self.root_folder
 
-        file_list = [os.path.join(folder_to_scan, file) for file in os.listdir(folder_to_scan) if
-                     file.endswith(".mhl")]
+        mhl_list = [os.path.join(folder_to_scan, file) for file in os.listdir(folder_to_scan) if
+                    file.endswith(".mhl")]
 
-        if not file_list:
+        if not mhl_list:
             raise MHLCheckerException("No backups found in specified folder")
 
-        file_list.sort()
+        mhl_list.sort()
 
-        return file_list
+        return mhl_list
 
     def sources_to_dict(self):
 
@@ -135,6 +142,11 @@ class MHLChecker:
     def run_checks(self):
 
         print(f"Starting checks on {os.path.basename(self.root_folder)}")
+
+        if len(self.source_dictionary) != self.files_scanned:
+
+            raise MHLCheckerException(f"{len(self.source_dictionary)} files in source index, but {self.files_scanned} "
+                                      f"found during scan")
 
         checker_passed = True
         checker_report = []
@@ -295,6 +307,16 @@ def mhl_to_dict(mhl_file_path: str, add_parent_folders=0, trim_top_levels=0, roo
 
         line = line.strip()
 
+        if line.startswith('<hashlist'):
+
+            ls = line.split()
+
+            mhl_version = ls[1].replace('version=', '').replace(">", "")
+
+            if mhl_version != '\"1.1\"':
+
+                raise MHLCheckerException(f'This MHL revision ({mhl_version}) is not supported')
+
         if line.startswith("<file>"):
 
             # remove the tags from the lines and save them to variables
@@ -382,10 +404,10 @@ if __name__ == '__main__':
 
         preset_dict = load_presets('presets.csv')
         make_checker_from_preset("/Volumes/CK_SSD/Sample footage/Test backups/0_Known_Good", "Tests", preset_dict)
-        make_checker_from_preset("/Volumes/CK_SSD/Sample footage/Test backups/1_Missing_Backup_Roll", "Tests", preset_dict)
-        make_checker_from_preset("/Volumes/CK_SSD/Sample footage/Test backups/2_Wrong_File_Size", "Tests", preset_dict)
-        make_checker_from_preset("/Volumes/CK_SSD/Sample footage/Test backups/TARTAN DAY 24", "Tartan", preset_dict)
-        make_checker_from_preset("/Volumes/CK_SSD/Sample footage/Test backups/WS_SD_001", "Winston Sugar", preset_dict)
+        # make_checker_from_preset("/Volumes/CK_SSD/Sample footage/Test backups/1_Missing_Backup_Roll", "Tests", preset_dict)
+        # make_checker_from_preset("/Volumes/CK_SSD/Sample footage/Test backups/2_Wrong_File_Size", "Tests", preset_dict)
+        # make_checker_from_preset("/Volumes/CK_SSD/Sample footage/Test backups/TARTAN DAY 24", "Tartan", preset_dict)
+        # make_checker_from_preset("/Volumes/CK_SSD/Sample footage/Test backups/WS_SD_001", "Winston Sugar", preset_dict)
 
     else:
 
