@@ -28,9 +28,10 @@ class BackupChecker:
 
         self.backup_mhls = self.get_backup_mhls()
         self.source_mhls = self.get_source_mhls()
-        self.day_ale = self.get_day_ale()
+        self.delivery_ale = self.get_delivery_ale()
 
         self.source_dictionary = self.sources_to_dict()
+        self.ale_clips = self.ale_to_clip_list()
 
         self.dual_backups = dual_backups
 
@@ -38,7 +39,7 @@ class BackupChecker:
 
         self.backups = self.create_backups_from_mhl_groups()
 
-        self.checker_passed = self.run_mhl_checks()
+        self.checker_passed = self.run_backup_checks()
 
         self.write_report_file()
 
@@ -91,7 +92,7 @@ class BackupChecker:
 
         return mhl_list
 
-    def get_day_ale(self):
+    def get_delivery_ale(self):
 
         folder_to_scan = self.get_folder_to_scan()
 
@@ -104,8 +105,9 @@ class BackupChecker:
 
                 return day_ale
 
+        self.checker_report.append('WARNING: no delivery ALE was found')
+        print_colour('WARNING: no delivery ALE was found', PrintColours.WARNING)
         return None
-        # raise BackupCheckerException("No day ALE found in the specified folder")
 
     def sources_to_dict(self):
 
@@ -118,6 +120,24 @@ class BackupChecker:
             dictionary.update(mhl_to_dict(mhl, add_parent_folders=self.add_parent_folders))
 
         return dictionary
+
+    def ale_to_clip_list(self):
+
+        if not self.delivery_ale:
+            return None
+
+        columns = ["Display name", "Display Name"]
+        data = []
+
+        for column in columns:
+
+            if column in self.delivery_ale.dataframe.columns:
+                data = list(self.delivery_ale.dataframe[column])
+                break
+
+        print(data)
+
+        return data
 
     def group_mhls(self):
 
@@ -141,6 +161,12 @@ class BackupChecker:
             print("Could not split primary and secondary backups")
             groups = [self.backup_mhls]
 
+        if len(groups) < 2:
+            self.checker_report.append('WARNING: only one backup MHL found')
+            print_colour('WARNING: only one backup MHL found', PrintColours.WARNING)
+
+        groups.sort()
+
         return groups
 
     def create_backups_from_mhl_groups(self):
@@ -148,19 +174,20 @@ class BackupChecker:
         backups = []
 
         for group in self.backup_groups:
-            backup = self.Backup(self.source_dictionary, group, self)
+            backup = self.Backup(self.source_dictionary, group, self, self.ale_clips)
             backups.append(backup)
 
         return backups
 
-    def run_mhl_checks(self):
+    def run_backup_checks(self):
 
         print(f"Starting checks on {os.path.basename(self.root_folder)}")
 
-        if len(self.source_dictionary) != self.files_scanned:
-            raise BackupCheckerException(
-                f"{len(self.source_dictionary)} files in source index, but {self.files_scanned} "
-                f"found during scan")
+        if not debug:
+            if len(self.source_dictionary) != self.files_scanned:
+                raise BackupCheckerException(
+                    f"{len(self.source_dictionary)} files in source index, but {self.files_scanned} "
+                    f"found during scan")
 
         checker_passed = True
         checker_report = []
@@ -168,6 +195,7 @@ class BackupChecker:
         for backup in self.backups:
 
             backup.compare_mhls()
+            backup.compare_clip_list()
 
             backup_passed = backup.report_backup()
 
@@ -222,7 +250,7 @@ class BackupChecker:
 
     class Backup:
 
-        def __init__(self, sources: {}, backups: [str], parent, day_ale: ale.Ale = None):
+        def __init__(self, sources: {}, backups: [str], parent, ale_clips):
 
             self.parent = parent
 
@@ -232,15 +260,17 @@ class BackupChecker:
             self.backup_report = []
 
             self.files_checked = 0
+            self.ale_clips_checked = 0
 
             self.backups = backups
-            self.day_ale = day_ale
+            self.ale_clips = ale_clips
 
             self.source_dictionary = sources
             self.backup_dictionary = self.backups_to_dict()
 
             self.missing_files = []
             self.wrong_files = []
+            self.missing_delivery = []
 
         def backups_to_dict(self):
 
@@ -283,23 +313,32 @@ class BackupChecker:
 
             return errors
 
-        def compare_ale(self):
+        def compare_clip_list(self):
 
-            if self.day_ale:
+            backup_file_basenames = [os.path.basename(x) for x in self.backup_dictionary.keys()]
 
-                try:
+            for clip in self.ale_clips:
 
-                    data = self.day_ale.dataframe['Source file path']
+                self.ale_clips_checked += 1
 
-                except IndexError:
+                if clip.endswith('ari') or clip.endswith('arx') or clip.endswith('dpx') or clip.endswith("dng"):
+                    frame_number = re.search(r'(?<=(\[))\d{7,8}', clip).group(0)
+                    entry_file = re.sub(r'\[\d{7,8}-\d{7,8}]', frame_number, clip)
+                else:
+                    entry_file = clip
 
-                    raise BackupCheckerException("No valid path column found in ALE")
+                if entry_file in backup_file_basenames:
+                    pass
+
+                else:
+                    self.missing_delivery.append(clip)
 
         def report_backup(self):
 
-            report = [self.name, f'{self.files_checked} files checked']
+            report = [self.name, f'{self.files_checked} files checked',
+                      f'{self.ale_clips_checked} ALE clips checked']
 
-            if not self.missing_files and not self.wrong_files:
+            if not self.missing_files and not self.wrong_files and not self.missing_delivery:
 
                 report.append("Passed")
                 passed = True
@@ -320,6 +359,12 @@ class BackupChecker:
                 else:
                     report = report + ["Mismatched files"] + self.wrong_files[:cutoff] + \
                              [f"and {len(self.wrong_files) - cutoff} more"]
+
+                if len(self.missing_delivery) <= cutoff:
+                    report = report + ["Missing deliveries"] + self.missing_delivery
+                else:
+                    report = report + ["Missing deliveries"] + self.missing_delivery[:cutoff] + \
+                             [f"and {len(self.missing_delivery) - cutoff} more"]
 
                 passed = False
 
@@ -381,7 +426,6 @@ def mhl_to_dict(mhl_file_path: str, add_parent_folders=0, trim_top_levels=0, roo
 
 
 def trim_paths(path_element_list, root_name='', root_pattern='', trim_top_levels=0):
-
     if root_name:
         for path_element_index, path_element in enumerate(path_element_list):
 
@@ -456,10 +500,10 @@ if __name__ == '__main__':
 
         this_preset_dict = load_presets('presets.csv')
         make_checker_from_preset("/Volumes/CK_SSD/Sample footage/Test backups/0_Known_Good", "Tests", this_preset_dict)
-        # make_checker_from_preset("/Volumes/CK_SSD/Sample footage/Test backups/1_Missing_Backup_Roll", "Tests", preset_dict)
-        # make_checker_from_preset("/Volumes/CK_SSD/Sample footage/Test backups/2_Wrong_File_Size", "Tests", preset_dict)
-        # make_checker_from_preset("/Volumes/CK_SSD/Sample footage/Test backups/TARTAN DAY 24", "Tartan", preset_dict)
-        # make_checker_from_preset("/Volumes/CK_SSD/Sample footage/Test backups/WS_SD_001", "Winston Sugar", preset_dict)
+        # make_checker_from_preset("/Volumes/CK_SSD/Sample footage/Test backups/1_Missing_Backup_Roll", "Tests", this_preset_dict)
+        # make_checker_from_preset("/Volumes/CK_SSD/Sample footage/Test backups/2_Wrong_File_Size", "Tests", this_preset_dict)
+        # make_checker_from_preset("/Volumes/CK_SSD/Sample footage/Test backups/TARTAN DAY 24", "Tartan",this_preset_dict)
+        # make_checker_from_preset("/Volumes/CK_SSD/Sample footage/Test backups/WS_SD_001", "Winston Sugar", this_preset_dict)
 
     else:
 
