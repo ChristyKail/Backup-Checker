@@ -135,8 +135,6 @@ class BackupChecker:
                 data = list(self.delivery_ale.dataframe[column])
                 break
 
-        print(data)
-
         return data
 
     def group_mhls(self):
@@ -183,11 +181,9 @@ class BackupChecker:
 
         print(f"Starting checks on {os.path.basename(self.root_folder)}")
 
-        if not debug:
-            if len(self.source_dictionary) != self.files_scanned:
-                raise BackupCheckerException(
-                    f"{len(self.source_dictionary)} files in source index, but {self.files_scanned} "
-                    f"found during scan")
+        if len(self.source_dictionary) != self.files_scanned:
+            self.checker_report.append('CRITICAL: scanned file count does not match index count')
+            print_colour('CRITICAL: scanned file count does not match index count', PrintColours.FAIL)
 
         checker_passed = True
         checker_report = []
@@ -316,6 +312,10 @@ class BackupChecker:
         def compare_clip_list(self):
 
             backup_file_basenames = [os.path.basename(x) for x in self.backup_dictionary.keys()]
+
+            if self.ale_clips is None:
+
+                return
 
             for clip in self.ale_clips:
 
@@ -500,8 +500,8 @@ if __name__ == '__main__':
 
         this_preset_dict = load_presets('presets.csv')
         make_checker_from_preset("/Volumes/CK_SSD/Sample footage/Test backups/0_Known_Good", "Tests", this_preset_dict)
-        # make_checker_from_preset("/Volumes/CK_SSD/Sample footage/Test backups/1_Missing_Backup_Roll", "Tests", this_preset_dict)
-        # make_checker_from_preset("/Volumes/CK_SSD/Sample footage/Test backups/2_Wrong_File_Size", "Tests", this_preset_dict)
+        make_checker_from_preset("/Volumes/CK_SSD/Sample footage/Test backups/1_Missing_Backup_Roll", "Tests", this_preset_dict)
+        make_checker_from_preset("/Volumes/CK_SSD/Sample footage/Test backups/2_Wrong_File_Size", "Tests", this_preset_dict)
         # make_checker_from_preset("/Volumes/CK_SSD/Sample footage/Test backups/TARTAN DAY 24", "Tartan",this_preset_dict)
         # make_checker_from_preset("/Volumes/CK_SSD/Sample footage/Test backups/WS_SD_001", "Winston Sugar", this_preset_dict)
 

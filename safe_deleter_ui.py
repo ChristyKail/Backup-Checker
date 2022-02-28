@@ -14,6 +14,8 @@ class BackupVerifierApp(tk.Tk):
 
         self.presets = mhl_backup_comparison.load_presets('presets.csv')
 
+        self.last_folder = ''
+
         self.setup_ui()
 
     def setup_ui(self):
@@ -61,7 +63,9 @@ class BackupVerifierApp(tk.Tk):
 
     def load(self):
 
-        folder = filedialog.askdirectory()
+        folder = filedialog.askdirectory(initialdir=self.last_folder)
+
+        self.last_folder = os.path.dirname(folder)
 
         self.reset_log()
 
