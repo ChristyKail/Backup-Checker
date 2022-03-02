@@ -2,6 +2,7 @@ import csv
 import os
 import re
 from datetime import datetime
+import sys
 
 import ale
 
@@ -18,10 +19,6 @@ class BackupChecker:
 
         self.logger = Logger(manager=manager)
         self.error_lock_triggered = False
-
-        self.checks_run = False
-        self.checker_passed = False
-        self.checker_report = []
 
         self.files_scanned = 0
 
@@ -189,6 +186,10 @@ class BackupChecker:
 
     def write_report_file(self):
 
+        if 'unittest' in sys.modules.keys():
+            self.logger.log("Running in test mode, file report will not be written")
+            return
+
         now = datetime.now()
         current_time = now.strftime("%Y%m%d_%H%M%S")
 
@@ -267,8 +268,6 @@ class BackupChecker:
 
                 self.parent.logger.log(f'Normalised backup path: {list(dictionary.keys())[0]}')
 
-            print(f'Normalised source path: {list(self.source_dictionary.keys())[0]}')
-
             return dictionary
 
         def compare_mhls(self):
@@ -298,7 +297,7 @@ class BackupChecker:
 
         def compare_clip_list(self):
 
-            backup_file_basenames = [os.path.basename(x) for x in self.backup_dictionary.keys()]
+            backup_file_base = [os.path.basename(x) for x in self.backup_dictionary.keys()]
 
             if self.ale_clips is None:
                 return
@@ -313,7 +312,7 @@ class BackupChecker:
                 else:
                     entry_file = clip
 
-                if entry_file in backup_file_basenames:
+                if entry_file in backup_file_base:
                     pass
 
                 else:
@@ -499,6 +498,10 @@ class Logger:
             self.log_report.append(message)
 
         if not supress_log:
+
+            if 'unittest' in sys.modules.keys():
+                return
+
             print_colour(message, colour)
             if self.manager:
                 self.manager.log(message, alert_level)
@@ -534,9 +537,12 @@ if __name__ == '__main__':
 
         this_preset_dict = load_presets('presets.csv')
         make_checker_from_preset("/Volumes/CK_SSD/Sample footage/Test backups/0_Known_Good", "Tests", this_preset_dict)
-        make_checker_from_preset("/Volumes/CK_SSD/Sample footage/Test backups/1_Missing_Backup_Roll", "Tests", this_preset_dict)
-        make_checker_from_preset("/Volumes/CK_SSD/Sample footage/Test backups/2_Wrong_File_Size", "Tests", this_preset_dict)
-        make_checker_from_preset("/Volumes/CK_SSD/Sample footage/Test backups/3_Missing_Folder", "Tests", this_preset_dict)
+        make_checker_from_preset("/Volumes/CK_SSD/Sample footage/Test backups/1_Missing_Backup_Roll", "Tests",
+                                 this_preset_dict)
+        make_checker_from_preset("/Volumes/CK_SSD/Sample footage/Test backups/2_Wrong_File_Size", "Tests",
+                                 this_preset_dict)
+        make_checker_from_preset("/Volumes/CK_SSD/Sample footage/Test backups/3_Missing_Folder", "Tests",
+                                 this_preset_dict)
         make_checker_from_preset("/Volumes/CK_SSD/Sample footage/Test backups/4_Missing_ALE", "Tests", this_preset_dict)
         # make_checker_from_preset("/Volumes/CK_SSD/Sample footage/Test backups/TARTAN DAY 24", "Tartan", this_preset_dict)
         # make_checker_from_preset("/Volumes/CK_SSD/Sample footage/Test backups/WS_SD_001", "Winston Sugar", this_preset_dict)

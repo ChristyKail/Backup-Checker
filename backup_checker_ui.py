@@ -2,7 +2,7 @@ import os
 import tkinter as tk
 from tkinter import ttk
 from tkinter import filedialog
-import backup_verifier
+import backup_checker
 
 
 class BackupVerifierApp(tk.Tk):
@@ -12,7 +12,7 @@ class BackupVerifierApp(tk.Tk):
 
         self.console_lines = 1
 
-        self.presets = mhl_backup_comparison.load_presets('presets.csv')
+        self.presets = backup_checker.load_presets('presets.csv')
 
         self.last_folder = ''
 
@@ -21,7 +21,7 @@ class BackupVerifierApp(tk.Tk):
     # noinspection PyAttributeOutsideInit
     def setup_ui(self):
 
-        self.title("Cinelab Film & Digital - Safe Deleter")
+        self.title("Cinelab Film & Digital - Backup Checker")
 
         try:
             self.logo_image = tk.PhotoImage(file="CFD-Icon_Standard.png")
@@ -79,12 +79,12 @@ class BackupVerifierApp(tk.Tk):
 
         try:
 
-            my_verifier = mhl_backup_comparison.make_checker_from_preset(folder,
-                                                                         self.combo_lto_preset.get(),
-                                                                         self.presets,
-                                                                         manager=self)
+            my_verifier = backup_checker.make_checker_from_preset(folder,
+                                                                  self.combo_lto_preset.get(),
+                                                                  self.presets,
+                                                                  manager=self)
 
-        except mhl_backup_comparison.BackupCheckerException as error:
+        except backup_checker.BackupCheckerException as error:
             self.log(f"Error in verifier: {error}\nEnding - checks did not complete", 4)
             return
 
