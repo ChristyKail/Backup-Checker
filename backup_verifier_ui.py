@@ -2,7 +2,7 @@ import os
 import tkinter as tk
 from tkinter import ttk
 from tkinter import filedialog
-import mhl_backup_comparison
+import backup_verifier
 
 
 class BackupVerifierApp(tk.Tk):
