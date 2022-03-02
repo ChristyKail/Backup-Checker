@@ -2,18 +2,22 @@ import csv
 import os
 import re
 from datetime import datetime
+
 import ale
 
 
 class BackupChecker:
 
     def __init__(self, root_folder, source_folders=None, backup_pattern="", backup_trim=0,
-                 dual_backups=True, add_roll_folder=1):
+                 dual_backups=True, add_roll_folder=1, manager=None, require_ale=False):
 
         if not source_folders:
             self.source_folders = ["Camera_Media", "Sound_Media"]
         else:
             self.source_folders = source_folders
+
+        self.logger = Logger(manager=manager)
+        self.error_lock_triggered = False
 
         self.checks_run = False
         self.checker_passed = False
@@ -26,20 +30,21 @@ class BackupChecker:
         self.backup_trim = backup_trim
         self.add_parent_folders = add_roll_folder
 
+        self.require_ale = require_ale
+
+        self.dual_backups = dual_backups
         self.backup_mhls = self.get_backup_mhls()
+        self.backup_groups = self.group_mhls()
+
         self.source_mhls = self.get_source_mhls()
         self.delivery_ale = self.get_delivery_ale()
 
         self.source_dictionary = self.sources_to_dict()
         self.ale_clips = self.ale_to_clip_list()
 
-        self.dual_backups = dual_backups
-
-        self.backup_groups = self.group_mhls()
-
         self.backups = self.create_backups_from_mhl_groups()
 
-        self.checker_passed = self.run_backup_checks()
+        self.run_backup_checks()
 
         self.write_report_file()
 
@@ -47,27 +52,24 @@ class BackupChecker:
 
         mhl_list = []
 
-        print_colour(f"Scanning folder {os.path.basename(self.root_folder)} for sources", PrintColours.UNDERLINE)
-
+        self.logger.log("Source MHLs:", report=True)
         for this_source_folder in self.source_folders:
 
             if not os.path.exists(os.path.join(self.root_folder, this_source_folder)):
-                message = f"{this_source_folder} folder is not present"
-                print_colour(message, PrintColours.WARNING)
-                self.checker_report.append(message)
+                message = f"[WARNING] {this_source_folder} folder not found"
+                self.logger.warning(message, report=True)
 
             else:
                 for root, dirs, files in os.walk(os.path.join(self.root_folder, this_source_folder)):
                     for file in files:
 
                         if str(file).endswith(".mhl"):
+                            self.logger.log(file, report=True)
                             mhl_list.append(os.path.join(root, file))
 
                         elif str(file) != '.DS_Store':
 
                             self.files_scanned += 1
-
-        self.checker_report += ['\n'] + [os.path.basename(str(x)) for x in mhl_list]
 
         if not mhl_list:
             raise BackupCheckerException("No sources found in specified source folders")
@@ -77,8 +79,6 @@ class BackupChecker:
         return mhl_list
 
     def get_backup_mhls(self):
-
-        print_colour(f"Scanning folder {os.path.basename(self.root_folder)} for backups", PrintColours.UNDERLINE)
 
         folder_to_scan = self.get_folder_to_scan()
 
@@ -105,8 +105,9 @@ class BackupChecker:
 
                 return day_ale
 
-        self.checker_report.append('WARNING: no delivery ALE was found')
-        print_colour('WARNING: no delivery ALE was found', PrintColours.WARNING)
+        if self.require_ale:
+            self.logger.warning("[WARNING] No delivery ALE found", report=True)
+
         return None
 
     def sources_to_dict(self):
@@ -115,7 +116,7 @@ class BackupChecker:
 
         mhl: str
         for mhl in self.source_mhls:
-            print(f"Loading source {os.path.basename(mhl)}")
+            self.logger.log(f"Loading source {os.path.basename(mhl)}")
 
             dictionary.update(mhl_to_dict(mhl, add_parent_folders=self.add_parent_folders))
 
@@ -156,12 +157,11 @@ class BackupChecker:
                 groups.append(secondary)
 
         else:
-            print("Could not split primary and secondary backups")
+            self.logger.warning("[WARNING] Could not split primary and secondary backups", report=True)
             groups = [self.backup_mhls]
 
         if len(groups) < 2:
-            self.checker_report.append('WARNING: only one backup MHL found')
-            print_colour('WARNING: only one backup MHL found', PrintColours.WARNING)
+            self.logger.warning('[WARNING] Only one backup MHL found', report=True)
 
         groups.sort()
 
@@ -179,60 +179,42 @@ class BackupChecker:
 
     def run_backup_checks(self):
 
-        print(f"Starting checks on {os.path.basename(self.root_folder)}")
-
         if len(self.source_dictionary) != self.files_scanned:
-            self.checker_report.append('CRITICAL: scanned file count does not match index count')
-            print_colour('CRITICAL: scanned file count does not match index count', PrintColours.FAIL)
-
-        checker_passed = True
-        checker_report = []
+            self.logger.error('\nScanned file count does not match index count!', True)
 
         for backup in self.backups:
-
             backup.compare_mhls()
             backup.compare_clip_list()
-
-            backup_passed = backup.report_backup()
-
-            checker_report = checker_report + ["\n"] + backup.backup_report
-
-            print()
-
-            if backup_passed:
-                print_colour('\n'.join(backup.backup_report), PrintColours.OKGREEN)
-            else:
-                print_colour('\n'.join(backup.backup_report), PrintColours.FAIL)
-                checker_passed = False
-
-            print()
-
-            self.checks_run = True
-
-        self.checker_report += checker_report
-
-        return checker_passed
+            backup.report_backup()
 
     def write_report_file(self):
 
         now = datetime.now()
         current_time = now.strftime("%Y%m%d_%H%M%S")
 
-        if not self.checks_run:
-            print_colour("Checks not yet run", PrintColours.WARNING)
+        if self.error_lock_triggered and self.logger.alert_level != 4:
+            raise BackupCheckerException("Critical internal error! Error lock has been triggered, but the logger is "
+                                         "not reporting an error")
 
-        if self.checker_passed:
-            file_name = f'{os.path.basename(self.root_folder)} - checks PASSED - {current_time}.txt'
-            # set_label(self.root_folder, 'green')
+        if self.logger.alert_level >= 4:
+            result = 'FAILED'
+
+        elif self.logger.alert_level >= 3:
+            result = 'WARNING'
+
+        elif self.logger.alert_level >= 2:
+            result = 'PASSED'
+
         else:
-            file_name = f'{os.path.basename(self.root_folder)} - checks FAILED - {current_time}.txt'
-            # set_label(self.root_folder, 'red')
+            result = 'UNKNOWN'
+
+        file_name = f'{os.path.basename(self.root_folder)} - checks {result} - {current_time}.txt'
 
         file_path = os.path.join(self.root_folder, file_name)
 
         with open(file_path, "w") as file_handler:
 
-            file_handler.write("\n".join(self.checker_report))
+            file_handler.write("\n".join(self.logger.log_report))
 
     def get_folder_to_scan(self):
 
@@ -243,6 +225,10 @@ class BackupChecker:
             folder_to_scan = self.root_folder
 
         return folder_to_scan
+
+    def lock_error(self):
+
+        self.error_lock_triggered = True
 
     class Backup:
 
@@ -273,13 +259,15 @@ class BackupChecker:
             dictionary = {}
 
             for mhl in self.backups:
-                print(f"Loading backup {os.path.basename(mhl)}")
+                self.parent.logger.log(f'\nLoading backup {self.name}')
 
                 dictionary.update(mhl_to_dict(mhl,
                                               trim_top_levels=self.parent.backup_trim,
                                               root_pattern=self.parent.backup_pattern))
 
-                print_colour(f'LTO preset resulted in path {list(dictionary.keys())[0]}', PrintColours.OKCYAN)
+                self.parent.logger.log(f'Normalised backup path: {list(dictionary.keys())[0]}')
+
+            print(f'Normalised source path: {list(self.source_dictionary.keys())[0]}')
 
             return dictionary
 
@@ -289,9 +277,6 @@ class BackupChecker:
 
             for source_file, source_size in self.source_dictionary.items():
 
-                if not self.files_checked:
-                    print(f'Source index example: {source_file}')
-
                 if source_file in self.backup_dictionary.keys():
 
                     if source_size == self.backup_dictionary[source_file]:
@@ -299,9 +284,11 @@ class BackupChecker:
 
                     else:
                         self.wrong_files.append(source_file)
+                        self.parent.lock_error()
 
                 else:
                     self.missing_files.append(source_file)
+                    self.parent.lock_error()
 
                 self.files_checked += 1
 
@@ -314,7 +301,6 @@ class BackupChecker:
             backup_file_basenames = [os.path.basename(x) for x in self.backup_dictionary.keys()]
 
             if self.ale_clips is None:
-
                 return
 
             for clip in self.ale_clips:
@@ -331,46 +317,39 @@ class BackupChecker:
                     pass
 
                 else:
+                    self.parent.lock_error()
                     self.missing_delivery.append(clip)
 
         def report_backup(self):
 
-            report = [self.name, f'{self.files_checked} files checked',
-                      f'{self.ale_clips_checked} ALE clips checked']
+            self.parent.logger.log(f'\n{self.name}', True)
+            self.parent.logger.log(f'{self.files_checked} files checked', report=True)
+            self.parent.logger.log(f'{self.ale_clips_checked} ALE clips checked', True)
 
-            if not self.missing_files and not self.wrong_files and not self.missing_delivery:
+            self.report_check_list(self.missing_files, "Missing source indexes")
+            self.report_check_list(self.wrong_files, "Incorrect source indexes")
+            self.report_check_list(self.missing_delivery, "Missing ALE clips")
 
-                report.append("Passed")
-                passed = True
+        def report_check_list(self, check_list, check_list_name):
+
+            if len(check_list):
+                self.parent.logger.error(check_list_name, report=True)
+                cutoff_count = 5
+                cutoff = False
+                for index, value in enumerate(check_list):
+
+                    self.parent.logger.error(f'\t{value}', report=True, supress_log=cutoff)
+
+                    if index >= cutoff_count + 1:
+                        cutoff = True
+                if cutoff:
+                    self.parent.logger.error(f'\t...and {len(check_list) - cutoff_count} more')
+
+                return False
 
             else:
-
-                cutoff = 10
-
-                report.append("Failed")
-                if len(self.missing_files) <= cutoff:
-                    report = report + ["Missing files"] + self.missing_files
-                else:
-                    report = report + ["Missing files"] + self.missing_files[:cutoff] + \
-                             [f"and {len(self.missing_files) - cutoff} more"]
-
-                if len(self.wrong_files) <= cutoff:
-                    report = report + ["Mismatched files"] + self.wrong_files
-                else:
-                    report = report + ["Mismatched files"] + self.wrong_files[:cutoff] + \
-                             [f"and {len(self.wrong_files) - cutoff} more"]
-
-                if len(self.missing_delivery) <= cutoff:
-                    report = report + ["Missing deliveries"] + self.missing_delivery
-                else:
-                    report = report + ["Missing deliveries"] + self.missing_delivery[:cutoff] + \
-                             [f"and {len(self.missing_delivery) - cutoff} more"]
-
-                passed = False
-
-            self.backup_report = report
-
-            return passed
+                self.parent.logger.passed(f'{check_list_name} - None', report=True)
+                return True
 
 
 class BackupCheckerException(Exception):
@@ -457,13 +436,14 @@ def remove_xml_tag(string: str, tag_name: str):
 def load_presets(file_path):
     with open(file_path, mode='r') as file_handler:
         reader = csv.reader(file_handler)
+        next(reader)
 
-        dictionary = {row[0]: [row[1], int(row[2]), int(row[3]), int(row[4]), row[5:]] for row in reader}
+        dictionary = {row[0]: [row[1], int(row[2]), int(row[3]), int(row[4]), row[5:8], int(row[9])] for row in reader}
 
     return dictionary
 
 
-def make_checker_from_preset(root_folder, preset_name, preset_dict):
+def make_checker_from_preset(root_folder, preset_name, preset_dict, manager=None):
     preset_list = preset_dict[preset_name]
 
     my_verifier = BackupChecker(root_folder,
@@ -471,12 +451,66 @@ def make_checker_from_preset(root_folder, preset_name, preset_dict):
                                 backup_trim=preset_list[1],
                                 dual_backups=preset_list[2],
                                 add_roll_folder=preset_list[3],
-                                source_folders=[x for x in preset_list[4] if x])
+                                source_folders=[x for x in preset_list[4] if x],
+                                require_ale=bool(int(preset_list[5])),
+                                manager=manager)
 
     return my_verifier
 
 
+class Logger:
+
+    # alert levels
+    # 0 - Verbose
+    # 1 - Normal
+    # 2 - Pass
+    # 3 - Warning
+    # 4 - Fail
+
+    def __init__(self, manager=None):
+
+        self.alert_level = 1
+
+        self.log_report = []
+
+        self.manager = manager
+
+    def log(self, message, report=False, supress_log=False):
+
+        self.do_log(message, 1, PrintColours.NORMAL, report, supress_log)
+
+    def passed(self, message, report=False, supress_log=False):
+
+        self.do_log(message, 2, PrintColours.OKGREEN, report, supress_log)
+
+    def warning(self, message, report=False, supress_log=False):
+
+        self.do_log(message, 3, PrintColours.WARNING, report, supress_log)
+
+    def error(self, message, report=False, supress_log=False):
+
+        self.do_log(message, 4, PrintColours.FAIL, report, supress_log)
+
+    def do_log(self, message, alert_level, colour, report, supress_log):
+
+        self.set_alert_level(alert_level)
+
+        if report:
+            self.log_report.append(message)
+
+        if not supress_log:
+            print_colour(message, colour)
+            if self.manager:
+                self.manager.log(message, alert_level)
+
+    def set_alert_level(self, level):
+
+        if level > self.alert_level:
+            self.alert_level = level
+
+
 class PrintColours:
+    NORMAL = ''
     HEADER = '\033[95m'
     OKBLUE = '\033[94m'
     OKCYAN = '\033[96m'
@@ -502,7 +536,9 @@ if __name__ == '__main__':
         make_checker_from_preset("/Volumes/CK_SSD/Sample footage/Test backups/0_Known_Good", "Tests", this_preset_dict)
         make_checker_from_preset("/Volumes/CK_SSD/Sample footage/Test backups/1_Missing_Backup_Roll", "Tests", this_preset_dict)
         make_checker_from_preset("/Volumes/CK_SSD/Sample footage/Test backups/2_Wrong_File_Size", "Tests", this_preset_dict)
-        # make_checker_from_preset("/Volumes/CK_SSD/Sample footage/Test backups/TARTAN DAY 24", "Tartan",this_preset_dict)
+        make_checker_from_preset("/Volumes/CK_SSD/Sample footage/Test backups/3_Missing_Folder", "Tests", this_preset_dict)
+        make_checker_from_preset("/Volumes/CK_SSD/Sample footage/Test backups/4_Missing_ALE", "Tests", this_preset_dict)
+        # make_checker_from_preset("/Volumes/CK_SSD/Sample footage/Test backups/TARTAN DAY 24", "Tartan", this_preset_dict)
         # make_checker_from_preset("/Volumes/CK_SSD/Sample footage/Test backups/WS_SD_001", "Winston Sugar", this_preset_dict)
 
     else:

@@ -18,6 +18,7 @@ class BackupVerifierApp(tk.Tk):
 
         self.setup_ui()
 
+    # noinspection PyAttributeOutsideInit
     def setup_ui(self):
 
         self.title("Cinelab Film & Digital - Safe Deleter")
@@ -78,25 +79,25 @@ class BackupVerifierApp(tk.Tk):
 
         try:
 
-            my_verifier = mhl_backup_comparison.make_checker_from_preset(folder, self.combo_lto_preset.get(), self.presets)
+            my_verifier = mhl_backup_comparison.make_checker_from_preset(folder,
+                                                                         self.combo_lto_preset.get(),
+                                                                         self.presets,
+                                                                         manager=self)
 
         except mhl_backup_comparison.BackupCheckerException as error:
             self.log(f"Error in verifier: {error}\nEnding - checks did not complete", 4)
             return
 
-        passed = my_verifier.checker_passed
-        report = '\n'.join(my_verifier.checker_report)
-
-        if passed:
-            self.log(report, 2)
-
-        else:
-            self.log(report, 4)
-
-        if passed:
+        if my_verifier.logger.alert_level >= 4 or my_verifier.error_lock_triggered:
+            self.label_info.config(fg="red")
+        elif my_verifier.logger.alert_level >= 3:
+            self.label_info.config(fg="orange")
+        elif my_verifier.logger.alert_level >= 2:
             self.label_info.config(fg="green")
         else:
-            self.label_info.config(fg="red")
+            self.label_info.config(fg="white")
+
+        self.log("[Checks complete]", 1)
 
     def reset_log(self):
 
@@ -111,27 +112,15 @@ class BackupVerifierApp(tk.Tk):
 
     def log(self, string: str, log_level: int):
 
-        line_count = string.count('\n') + 1
-
         self.console_lines = self.text_console.get("1.0", 'end').count('\n') + 1
         self.text_console['state'] = 'normal'
-        self.text_console.insert(tk.END, "\n" + string)
+        self.text_console.insert(tk.END, f"\n{string}", (str(log_level),))
 
-        if log_level == 0 or log_level == 1:
-            self.text_console.tag_add("Normal", f'{self.console_lines}.0', f'{self.console_lines+line_count}.end')
-
-        elif log_level == 2:
-            self.text_console.tag_add("Good", f'{self.console_lines}.0', f'{self.console_lines+line_count}.end')
-            self.text_console.tag_config("Good", foreground="green")
-
-        elif log_level == 3:
-            self.text_console.tag_add("Warning", f'{self.console_lines}.0', f'{self.console_lines+line_count}.end')
-            self.text_console.tag_config("Warning", foreground="#ff9200")
-
-        elif log_level == 4:
-
-            self.text_console.tag_add("Fail", f'{self.console_lines}.0', f'{self.console_lines+line_count}.end')
-            self.text_console.tag_config("Fail", foreground="red")
+        self.text_console.tag_config("0", foreground="grey")
+        self.text_console.tag_config("1", foreground="grey")
+        self.text_console.tag_config("2", foreground="green")
+        self.text_console.tag_config("3", foreground="#ff9200")
+        self.text_console.tag_config("4", foreground="red")
 
         self.text_console.see('end')
 
