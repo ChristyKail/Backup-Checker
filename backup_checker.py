@@ -47,6 +47,8 @@ class BackupChecker:
 
     def get_source_mhls(self):
 
+        """search the source folders for mhls, and return a list of the mhl filenames"""
+
         mhl_list = []
 
         self.logger.log("Source MHLs:", report=True)
@@ -77,6 +79,8 @@ class BackupChecker:
 
     def get_backup_mhls(self):
 
+        """search the verifier folder (or the day folder) for mhls, and return a list of the mhl filename """
+
         folder_to_scan = self.get_folder_to_scan()
 
         mhl_list = [os.path.join(folder_to_scan, file) for file in os.listdir(folder_to_scan) if
@@ -90,6 +94,8 @@ class BackupChecker:
         return mhl_list
 
     def get_delivery_ale(self):
+
+        """search the verifier folder (or the day folder) for an ale, and return an ale object """
 
         folder_to_scan = self.get_folder_to_scan()
 
@@ -109,6 +115,8 @@ class BackupChecker:
 
     def sources_to_dict(self):
 
+        """take the list of source mhl filenames, and return a dictionary of every file and filesize combination"""
+
         dictionary = {}
 
         mhl: str
@@ -121,21 +129,25 @@ class BackupChecker:
 
     def ale_to_clip_list(self):
 
+        """return a list of every source filename in the delivery ale"""
+
         if not self.delivery_ale:
             return None
 
-        columns = ["Display name", "Display Name"]
+        columns = ["Display name", "Display Name", 'UNC', 'Source File Path', 'File path', 'Source File']
         data = []
 
         for column in columns:
 
             if column in self.delivery_ale.dataframe.columns:
-                data = list(self.delivery_ale.dataframe[column])
+                data = [os.path.basename(x) for x in self.delivery_ale.dataframe[column]]
                 break
 
         return data
 
     def group_mhls(self):
+
+        """sort the backup mhls into primary and secondary groups, based on their filenames"""
 
         groups_dict = {
             "unknown": [],
@@ -187,13 +199,15 @@ class BackupChecker:
         groups = [x for x in groups_dict.values() if x]
 
         if len(groups) < 2 and self.dual_backups:
-            self.logger.warning('[WARNING] Only one backup MHL found', report=True)
+            self.logger.warning('[WARNING] Only one backup found', report=True)
 
         groups.sort()
 
         return groups
 
     def create_backups_from_mhl_groups(self):
+
+        """convert each group of backup mhls to a backup object, and return them as a list"""
 
         backups = []
 
@@ -204,6 +218,8 @@ class BackupChecker:
         return backups
 
     def run_backup_checks(self):
+
+        """for each backup, run mhl checks, ale checks, and report"""
 
         if len(self.source_dictionary) != self.files_scanned:
             self.logger.warning(
@@ -216,6 +232,8 @@ class BackupChecker:
             backup.report_backup()
 
     def write_report_file(self):
+
+        """write out the saved log report to a file in the day folder"""
 
         if 'unittest' in sys.modules.keys():
             self.logger.log("Running in test mode, file report will not be written")
@@ -250,6 +268,8 @@ class BackupChecker:
 
     def get_folder_to_scan(self):
 
+        """check if a verifier folder exists, and return it. Otherwise, return the day folder"""
+
         if os.path.isdir(os.path.join(self.root_folder, 'Verifier')):
 
             folder_to_scan = os.path.join(self.root_folder, 'Verifier')
@@ -260,15 +280,20 @@ class BackupChecker:
 
     def lock_error(self):
 
+        """
+        Enable the checker's error lock.
+        This should be triggered whenever a checker error is found, in case the logging system has a glitch
+        """
+
         self.error_lock_triggered = True
 
     class Backup:
 
-        def __init__(self, sources: {}, backups: [str], parent, ale_clips):
+        def __init__(self, source_dictionary: {}, backup_mhl_list: [str], parent, ale_clips):
 
             self.parent = parent
 
-            self.name = " ".join([os.path.basename(x).strip(".mhl") for x in backups])
+            self.name = " ".join([os.path.basename(x).strip(".mhl") for x in backup_mhl_list])
 
             self.checked = False
             self.backup_report = []
@@ -276,17 +301,19 @@ class BackupChecker:
             self.files_checked = 0
             self.ale_clips_checked = 0
 
-            self.backups = backups
+            self.backups = backup_mhl_list
             self.ale_clips = ale_clips
 
-            self.source_dictionary = sources
-            self.backup_dictionary = self.backups_to_dict()
+            self.source_dictionary = source_dictionary
+            self.backup_dictionary = self.backup_mhls_to_dict()
 
             self.missing_files = []
             self.wrong_files = []
             self.missing_delivery = []
 
-        def backups_to_dict(self):
+        def backup_mhls_to_dict(self):
+
+            """take the list of backup mhl filenames, and return a dictionary of every file and filesize combination"""
 
             dictionary = {}
 
@@ -302,6 +329,8 @@ class BackupChecker:
             return dictionary
 
         def compare_mhls(self):
+
+            """check that every source index in the source dictionary is in the backup dictionary"""
 
             errors = 0
 
@@ -328,6 +357,8 @@ class BackupChecker:
 
         def compare_clip_list(self):
 
+            """check that every clip in the ale clip list is in the backup dictionary"""
+
             backup_file_base = [os.path.basename(x) for x in self.backup_dictionary.keys()]
 
             if self.ale_clips is None:
@@ -352,6 +383,8 @@ class BackupChecker:
 
         def report_backup(self):
 
+            """use the parent checker's logger to report each check's results"""
+
             self.parent.logger.log(f'\n{self.name}', True)
             self.parent.logger.log(f'{self.files_checked} files checked', report=True)
             self.parent.logger.log(f'{self.ale_clips_checked} ALE clips checked', True)
@@ -361,6 +394,8 @@ class BackupChecker:
             self.report_check_list(self.missing_delivery, "Missing ALE clips")
 
         def report_check_list(self, check_list, check_list_name):
+
+            """use the parent checker's logger to report a specified check's results"""
 
             if len(check_list):
                 self.parent.logger.error(check_list_name, report=True)
@@ -389,6 +424,9 @@ class BackupCheckerException(Exception):
 
 
 def mhl_to_dict(mhl_file_path: str, add_parent_folders=0, trim_top_levels=0, root_pattern=r''):
+
+    """load a mhl file and return a dictionary of files and file sizes with normalised file paths"""
+
     dict_of_files_and_sizes = {}
 
     with open(mhl_file_path, "r") as file_handler:
@@ -435,6 +473,9 @@ def mhl_to_dict(mhl_file_path: str, add_parent_folders=0, trim_top_levels=0, roo
 
 
 def trim_paths(path_element_list, root_name='', root_pattern='', trim_top_levels=0):
+
+    """normalise a list of file path elements and return it as a list of elements"""
+
     if root_name:
         for path_element_index, path_element in enumerate(path_element_list):
 
@@ -460,6 +501,9 @@ def trim_paths(path_element_list, root_name='', root_pattern='', trim_top_levels
 
 
 def remove_xml_tag(string: str, tag_name: str):
+
+    """remove the html/xml start and end tags from around a string"""
+
     return string.replace(f'<{tag_name}>', "").replace(f'</{tag_name}>', "").strip()
 
 
