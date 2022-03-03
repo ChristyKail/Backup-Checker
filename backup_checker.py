@@ -137,27 +137,56 @@ class BackupChecker:
 
     def group_mhls(self):
 
-        groups = []
+        groups_dict = {
+            "unknown": [],
+            "tape_primary": [],
+            "tape_secondary": [],
+            "tape_tertiary": [],
+            "drive_primary": [],
+            "drive_secondary": [],
+            "drive_tertiary": []
+        }
 
-        if not self.dual_backups:
-            return [self.backup_mhls]
+        for mhl in self.backup_mhls:
 
-        if self.backup_mhls[0][-5].isnumeric():
+            base = os.path.basename(mhl)
 
-            primary = [f for f in self.backup_mhls if (int(f[-5]) % 2 != 0)]
-            secondary = [f for f in self.backup_mhls if (int(f[-5]) % 2 == 0)]
+            # match standard LTO (LTO001)
+            if re.search(r'^[A-Z0-9]{4}\d{2}\.mhl', base):
 
-            if len(primary):
-                groups.append(primary)
+                if self.dual_backups:
 
-            if len(secondary):
-                groups.append(secondary)
+                    if int(base[-5]) % 2 != 0:
+                        groups_dict['tape_primary'].append(mhl)
 
-        else:
-            self.logger.warning("[WARNING] Could not split primary and secondary backups", report=True)
-            groups = [self.backup_mhls]
+                    if int(base[-5]) % 2 == 0:
+                        groups_dict['tape_secondary'].append(mhl)
 
-        if len(groups) < 2:
+                else:
+                    groups_dict['tape_primary'].append(mhl)
+
+            # match primary drive (_001A or _001)
+            elif re.search(r'_\d{3}A*.mhl', base):
+
+                groups_dict['drive_primary'].append(mhl)
+
+            # match secondary drive (_001B)
+            elif re.search(r'_\d{3}B.mhl', base):
+
+                groups_dict['drive_secondary'].append(mhl)
+
+            # match tertiary drive (_001C)
+            elif re.search(r'_\d{3}C.mhl', base):
+
+                groups_dict['drive_tertiary'].append(mhl)
+
+            else:
+                self.logger.warning(f"[WARNING] Could not categorise backup {base}", report=True)
+                groups_dict['unknown'].append(mhl)
+
+        groups = [x for x in groups_dict.values() if x]
+
+        if len(groups) < 2 and self.dual_backups:
             self.logger.warning('[WARNING] Only one backup MHL found', report=True)
 
         groups.sort()
@@ -177,7 +206,9 @@ class BackupChecker:
     def run_backup_checks(self):
 
         if len(self.source_dictionary) != self.files_scanned:
-            self.logger.error('\nScanned file count does not match index count!', True)
+            self.logger.warning(
+                f'\nScanned file count {self.files_scanned} does not match index count {len(self.source_dictionary)}',
+                True)
 
         for backup in self.backups:
             backup.compare_mhls()
@@ -260,7 +291,7 @@ class BackupChecker:
             dictionary = {}
 
             for mhl in self.backups:
-                self.parent.logger.log(f'\nLoading backup {self.name}')
+                self.parent.logger.log(f'\nLoading backup {os.path.basename(mhl)}')
 
                 dictionary.update(mhl_to_dict(mhl,
                                               trim_top_levels=self.parent.backup_trim,
@@ -499,8 +530,8 @@ class Logger:
 
         if not supress_log:
 
-            if 'unittest' in sys.modules.keys():
-                return
+            # if 'unittest' in sys.modules.keys():
+            #     return
 
             print_colour(message, colour)
             if self.manager:

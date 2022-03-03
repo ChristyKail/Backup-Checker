@@ -21,7 +21,7 @@ class BackupVerifierApp(tk.Tk):
     # noinspection PyAttributeOutsideInit
     def setup_ui(self):
 
-        self.title("Cinelab Film & Digital - Backup Checker")
+        self.title("Cinelab Film & Digital - Backup Checker - Revision 3")
 
         try:
             self.logo_image = tk.PhotoImage(file="CFD-Icon_Standard.png")
@@ -44,11 +44,11 @@ class BackupVerifierApp(tk.Tk):
         self.btn_input.grid(column=1, row=1, columnspan=2, padx=20, pady=5)
 
         # LTO preset
-        self.label_lto_preset = tk.Label(self, text="LTO layout type")
+        self.label_lto_preset = tk.Label(self, text="Job format:")
         self.label_lto_preset.grid(column=1, row=5, sticky="E")
         lto_preset_list = list(self.presets.keys())
         self.combo_lto_preset = ttk.Combobox(self, values=lto_preset_list, width=20, state="readonly")
-        self.combo_lto_preset.current(1)
+        self.combo_lto_preset.current(0)
         self.combo_lto_preset.grid(column=2, row=5, sticky="W")
 
         # info label
