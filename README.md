@@ -10,7 +10,7 @@ Additionally, it can check that every clip referenced in an ALE is also present 
 ##Installation
 Download the source code, unzip the package, and run the `backup_checker.py` script by running `python3 backup_checker.py`
 
-<img alt="Main window" height="500" src="https://imgur.com/s5veD9s"/>
+<img alt="Main window" height="500" src="https://i.imgur.com/s5veD9s.png"/>
 
 ##Basic operation
  - Place your backup MHLs and delivery ALE in a `Verifier` folder inside the day folder you want to check.
@@ -36,7 +36,7 @@ Job format presets are stored in the `presets.csv` file, next to the tool. You c
   - The two source MHLs (created by Silverstack) are left in place, in the `Camera_Media` and `Sound_Media` folders. These folders are defined in the job format preset
   - The backup MHLs (Created by YoYotta) and optionally a delivery ALE are placed in a `Verifier` folder. Alternatively, they can be placed in the level above (`TEST_DAY_001`). The tool will always default to using the `Verifier` folder.
   
- <img alt="Main window" height="500" src="https://imgur.com/XCoHuxu"/>
+ <img alt="Main window" height="500" src="https://i.imgur.com/XCoHuxu.png"/>
 
 ##Path normalization 
 In the example above, the source MHL and backup MHL will use different paths to refer to the same files:
