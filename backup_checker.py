@@ -7,6 +7,17 @@ import sys
 import ale
 
 
+class IgnoredFiles:
+    ignore = [
+        '.DS_Store',
+        '.fmtsig_sounddev',
+        '.mixpre_sounddev',
+        '.scorpio_sounddev',
+        'IndexerVolumeGuid',
+        'WPSettings.dat'
+    ]
+
+
 class BackupChecker:
 
     def __init__(self, root_folder, source_folders=None, backup_pattern="", backup_trim=0,
@@ -66,8 +77,10 @@ class BackupChecker:
                             self.logger.log(file, report=True)
                             mhl_list.append(os.path.join(root, file))
 
-                        elif str(file) != '.DS_Store':
+                        elif str(file) in IgnoredFiles.ignore:
+                            self.logger.log(f"Skipped excluded file in source files {str(file)}")
 
+                        else:
                             self.files_scanned += 1
 
         if not mhl_list:
@@ -115,7 +128,7 @@ class BackupChecker:
 
     def sources_to_dict(self):
 
-        """take the list of source mhl filenames, and return a dictionary of every file and filesize combination"""
+        """take the list of source mhl filenames, and return a dictionary of every file and file size combination"""
 
         dictionary = {}
 
@@ -125,7 +138,15 @@ class BackupChecker:
 
             dictionary.update(mhl_to_dict(mhl, add_parent_folders=self.add_parent_folders))
 
-        return dictionary
+        out_dictionary = {}
+
+        for key, value in dictionary.items():
+            if os.path.basename(key) in IgnoredFiles.ignore:
+                self.logger.log(f"Skipped excluded file in source index {key}")
+            else:
+                out_dictionary[key] = value
+
+        return out_dictionary
 
     def ale_to_clip_list(self):
 
@@ -134,14 +155,20 @@ class BackupChecker:
         if not self.delivery_ale:
             return None
 
-        columns = ["Display name", "Display Name", 'UNC', 'Source File Path', 'File path', 'Source File']
+        columns = ["Display name", "Display Name", 'Filepath', 'UNC', 'Source File Path', 'File path', 'Source File']
         data = []
 
         for column in columns:
 
             if column in self.delivery_ale.dataframe.columns:
                 data = [os.path.basename(x) for x in self.delivery_ale.dataframe[column]]
+
+                self.logger.log(f'Loading ALE clip names from {column} - {data[0]}')
+
                 break
+
+        if not len(data):
+            self.logger.log(f'[WARNING] No valid data found in delivery ALE')
 
         return data
 
@@ -313,7 +340,7 @@ class BackupChecker:
 
         def backup_mhls_to_dict(self):
 
-            """take the list of backup mhl filenames, and return a dictionary of every file and filesize combination"""
+            """take the list of backup mhl filenames, and return a dictionary of every file and file size combination"""
 
             dictionary = {}
 
@@ -424,7 +451,6 @@ class BackupCheckerException(Exception):
 
 
 def mhl_to_dict(mhl_file_path: str, add_parent_folders=0, trim_top_levels=0, root_pattern=r''):
-
     """load a mhl file and return a dictionary of files and file sizes with normalised file paths"""
 
     dict_of_files_and_sizes = {}
@@ -473,7 +499,6 @@ def mhl_to_dict(mhl_file_path: str, add_parent_folders=0, trim_top_levels=0, roo
 
 
 def trim_paths(path_element_list, root_name='', root_pattern='', trim_top_levels=0):
-
     """normalise a list of file path elements and return it as a list of elements"""
 
     if root_name:
@@ -501,7 +526,6 @@ def trim_paths(path_element_list, root_name='', root_pattern='', trim_top_levels
 
 
 def remove_xml_tag(string: str, tag_name: str):
-
     """remove the html/xml start and end tags from around a string"""
 
     return string.replace(f'<{tag_name}>', "").replace(f'</{tag_name}>', "").strip()
@@ -612,13 +636,13 @@ if __name__ == '__main__':
 
         this_preset_dict = load_presets('presets.csv')
         make_checker_from_preset("/Volumes/CK_SSD/Sample footage/Test backups/0_Known_Good", "Tests", this_preset_dict)
-        make_checker_from_preset("/Volumes/CK_SSD/Sample footage/Test backups/1_Missing_Backup_Roll", "Tests",
-                                 this_preset_dict)
-        make_checker_from_preset("/Volumes/CK_SSD/Sample footage/Test backups/2_Wrong_File_Size", "Tests",
-                                 this_preset_dict)
-        make_checker_from_preset("/Volumes/CK_SSD/Sample footage/Test backups/3_Missing_Folder", "Tests",
-                                 this_preset_dict)
-        make_checker_from_preset("/Volumes/CK_SSD/Sample footage/Test backups/4_Missing_ALE", "Tests", this_preset_dict)
+        # make_checker_from_preset("/Volumes/CK_SSD/Sample footage/Test backups/1_Missing_Backup_Roll", "Tests",
+        #                          this_preset_dict)
+        # make_checker_from_preset("/Volumes/CK_SSD/Sample footage/Test backups/2_Wrong_File_Size", "Tests",
+        #                          this_preset_dict)
+        # make_checker_from_preset("/Volumes/CK_SSD/Sample footage/Test backups/3_Missing_Folder", "Tests",
+        #                          this_preset_dict)
+        # make_checker_from_preset("/Volumes/CK_SSD/Sample footage/Test backups/4_Missing_ALE", "Tests", this_preset_dict)
         # make_checker_from_preset("/Volumes/CK_SSD/Sample footage/Test backups/TARTAN DAY 24", "Tartan", this_preset_dict)
         # make_checker_from_preset("/Volumes/CK_SSD/Sample footage/Test backups/WS_SD_001", "Winston Sugar", this_preset_dict)
 
