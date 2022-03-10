@@ -3,3 +3,5 @@ Tartan,,5,1,1,Camera_Media,Sound_Media,,,0
 Winston Sugar,,3,0,1,Scans,,,,1
 Tests,,8,1,1,Camera_Media,Sound_Media,,,1
 Tests_Single,,8,0,1,Camera_Media,Sound_Media,,,1
+Wakefield,^wav$|_hde$,,0,1,Camera_Media,Sound_Media,,,1
+Allelujah,,5,1,1,Camera_Media,Sound_Media,,,1
