@@ -1,6 +1,7 @@
 import csv
 import os
 import re
+import time
 from datetime import datetime
 import sys
 
@@ -31,7 +32,7 @@ class BackupChecker:
         self.logger = Logger(manager=manager)
         self.error_lock_triggered = False
 
-        self.files_scanned = 0
+        self.files_scanned = []
 
         self.root_folder = root_folder
         self.backup_pattern = backup_pattern
@@ -52,6 +53,7 @@ class BackupChecker:
 
         self.backups = self.create_backups_from_mhl_groups()
 
+        self.check_indexes_vs_scanned()
         self.run_backup_checks()
 
         self.write_report_file()
@@ -81,7 +83,7 @@ class BackupChecker:
                             self.logger.log(f"Skipped excluded file in source files {str(file)}")
 
                         else:
-                            self.files_scanned += 1
+                            self.files_scanned.append(file)
 
         if not mhl_list:
             raise BackupCheckerException("No sources found in specified source folders")
@@ -248,15 +250,31 @@ class BackupChecker:
 
         """for each backup, run mhl checks, ale checks, and report"""
 
-        if len(self.source_dictionary) != self.files_scanned:
-            self.logger.warning(
-                f'\nScanned file count {self.files_scanned} does not match index count {len(self.source_dictionary)}',
-                True)
-
         for backup in self.backups:
             backup.compare_mhls()
             backup.compare_clip_list()
             backup.report_backup()
+
+    def check_indexes_vs_scanned(self):
+
+        if len(self.source_dictionary) != len(self.files_scanned):
+            self.logger.warning(
+                f'\nScanned file count {len(self.files_scanned)} does not match index count {len(self.source_dictionary)}',
+                True)
+
+            diff = set(self.files_scanned) ^ set([os.path.basename(x) for x in self.source_dictionary.keys()])
+
+            cutoff_count = 5
+            cutoff = False
+
+            for index, value in enumerate(diff):
+
+                self.logger.warning(f'\t{value}', report=True, supress_log=cutoff)
+
+                if index >= cutoff_count + 1:
+                    cutoff = True
+            if cutoff:
+                self.logger.warning(f'\t...and {len(diff) - cutoff_count} more')
 
     def write_report_file(self):
 
@@ -518,7 +536,9 @@ def trim_paths(path_element_list, root_name='', root_pattern='', trim_top_levels
     if trim_top_levels:
 
         if trim_top_levels >= len(path_element_list):
-            raise BackupCheckerException("Path trimmed to less than 1! Are you using the wrong preset?")
+            error_message = f"{os.path.sep.join(path_element_list)} - Path trimmed to less than 1! Are you using the " \
+                            f"wrong preset? "
+            raise BackupCheckerException(error_message)
 
         path_element_list = path_element_list[trim_top_levels:]
 
@@ -635,16 +655,14 @@ if __name__ == '__main__':
     if debug:
 
         this_preset_dict = load_presets('presets.csv')
-        make_checker_from_preset("/Volumes/CK_SSD/Sample footage/Test backups/0_Known_Good", "Tests", this_preset_dict)
-        # make_checker_from_preset("/Volumes/CK_SSD/Sample footage/Test backups/1_Missing_Backup_Roll", "Tests",
-        #                          this_preset_dict)
-        # make_checker_from_preset("/Volumes/CK_SSD/Sample footage/Test backups/2_Wrong_File_Size", "Tests",
-        #                          this_preset_dict)
-        # make_checker_from_preset("/Volumes/CK_SSD/Sample footage/Test backups/3_Missing_Folder", "Tests",
-        #                          this_preset_dict)
-        # make_checker_from_preset("/Volumes/CK_SSD/Sample footage/Test backups/4_Missing_ALE", "Tests", this_preset_dict)
-        # make_checker_from_preset("/Volumes/CK_SSD/Sample footage/Test backups/TARTAN DAY 24", "Tartan", this_preset_dict)
-        # make_checker_from_preset("/Volumes/CK_SSD/Sample footage/Test backups/WS_SD_001", "Winston Sugar", this_preset_dict)
+        # make_checker_from_preset("/Volumes/CK_SSD/Sample footage/Test backups/6_Added_file", "z_Tests", this_preset_dict)
+
+        start = time.perf_counter()
+        make_checker_from_preset("//Volumes/CK_SSD/Sample footage/Test backups/HDE_TEST", "Tartan",
+                                 this_preset_dict)
+        end = time.perf_counter()
+
+        print(f"Performance: {end-start}")
 
     else:
 
