@@ -415,7 +415,7 @@ class BackupChecker:
 
                 self.ale_clips_checked += 1
 
-                frame_range_match = re.match(r'\[(\d+)-(\d+)]', clip)
+                frame_range_match = re.search(r'\[(\d+)-(\d+)]', clip)
 
                 if frame_range_match:
 
