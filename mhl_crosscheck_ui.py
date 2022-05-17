@@ -2,7 +2,7 @@ import os
 import tkinter as tk
 from tkinter import ttk
 from tkinter import filedialog
-import backup_checker
+import mhl_crosscheck
 
 
 class BackupVerifierApp(tk.Tk):
@@ -12,7 +12,7 @@ class BackupVerifierApp(tk.Tk):
 
         self.console_lines = 1
 
-        self.presets = backup_checker.load_presets('presets.csv')
+        self.presets = mhl_crosscheck.load_presets('presets.csv')
 
         self.last_folder = ''
 
@@ -21,7 +21,7 @@ class BackupVerifierApp(tk.Tk):
     # noinspection PyAttributeOutsideInit
     def setup_ui(self):
 
-        self.title("Cinelab Film & Digital - Backup Checker - Revision 3")
+        self.title("Cinelab Film & Digital - MHL Crosscheck  - v{}".format(mhl_crosscheck.__version__))
 
         try:
             self.logo_image = tk.PhotoImage(file="CFD-Icon_Standard.png")
@@ -79,12 +79,12 @@ class BackupVerifierApp(tk.Tk):
 
         try:
 
-            my_verifier = backup_checker.make_checker_from_preset(folder,
+            my_verifier = mhl_crosscheck.make_checker_from_preset(folder,
                                                                   self.combo_lto_preset.get(),
                                                                   self.presets,
                                                                   manager=self)
 
-        except backup_checker.BackupCheckerException as error:
+        except mhl_crosscheck.BackupCheckerException as error:
             self.log(f"Error in verifier: {error}\nEnding - checks did not complete", 4)
             return
 
