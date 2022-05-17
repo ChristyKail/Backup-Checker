@@ -7,6 +7,8 @@ import sys
 
 import ale
 
+__version__ = '1.0.0'
+
 
 class IgnoredFiles:
     ignore = [
@@ -413,7 +415,7 @@ class BackupChecker:
 
                 self.ale_clips_checked += 1
 
-                if clip.endswith('ari') or clip.endswith('arx') or clip.endswith('dpx') or clip.endswith("dng"):
+                if clip.split('.')[-1].lower() in ['ari', 'arx', 'dpx', 'dng']:
                     frame_number = re.search(r'(?<=(\[))\d{7,8}', clip).group(0)
                     entry_file = re.sub(r'\[\d{7,8}-\d{7,8}]', frame_number, clip)
                 else:
