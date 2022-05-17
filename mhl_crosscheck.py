@@ -415,9 +415,14 @@ class BackupChecker:
 
                 self.ale_clips_checked += 1
 
-                if clip.split('.')[-1].lower() in ['ari', 'arx', 'dpx', 'dng']:
-                    frame_number = re.search(r'(?<=(\[))\d{7,8}', clip).group(0)
-                    entry_file = re.sub(r'\[\d{7,8}-\d{7,8}]', frame_number, clip)
+                frame_range_match = re.match(r'\[(\d+)-(\d+)]', clip)
+
+                if frame_range_match:
+
+                    frame_number = frame_range_match.group(2)
+
+                    entry_file = re.sub(r'\[\d+-\d+]', frame_number, clip)
+
                 else:
                     entry_file = clip
 
