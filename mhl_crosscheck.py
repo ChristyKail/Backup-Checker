@@ -7,18 +7,29 @@ import sys
 
 import ale
 
-__version__ = '1.0.0'
+__version__ = '1.1.0'
 
 
 class IgnoredFiles:
-    ignore = [
-        '.DS_Store',
-        '.fmtsig_sounddev',
-        '.mixpre_sounddev',
-        '.scorpio_sounddev',
-        'IndexerVolumeGuid',
-        'WPSettings.dat'
-    ]
+
+    def __init__(self):
+        self.ignore_list = []
+        self.load_ignore_list()
+
+    def load_ignore_list(self):
+
+        ignore_list = []
+
+        try:
+            with open('ignore_files.txt', 'r') as ignore_file:
+                for line in ignore_file:
+                    ignore_list.append(line.strip())
+            self.ignore_list = ignore_list
+
+        except FileNotFoundError:
+
+            print("{}No ignore file found{}".format(PrintColours.FAIL, PrintColours.ENDC))
+            sys.exit(1)
 
 
 class BackupChecker:
@@ -33,6 +44,7 @@ class BackupChecker:
 
         self.logger = Logger(manager=manager)
         self.error_lock_triggered = False
+        self.ignore_files = IgnoredFiles()
 
         self.files_scanned = []
 
@@ -81,7 +93,7 @@ class BackupChecker:
                             self.logger.log(file, report=True)
                             mhl_list.append(os.path.join(root, file))
 
-                        elif str(file) in IgnoredFiles.ignore:
+                        elif str(file) in self.ignore_files.ignore_list:
                             self.logger.log(f"Skipped excluded file in source files {str(file)}")
 
                         else:
@@ -145,7 +157,7 @@ class BackupChecker:
         out_dictionary = {}
 
         for key, value in dictionary.items():
-            if os.path.basename(key) in IgnoredFiles.ignore:
+            if os.path.basename(key) in self.ignore_files.ignore_list:
                 self.logger.log(f"Skipped excluded file in source index {key}")
             else:
                 out_dictionary[key] = value
@@ -159,7 +171,7 @@ class BackupChecker:
         if not self.delivery_ale:
             return None
 
-        columns = ["Display name", "Display Name", 'Filepath', 'UNC', 'Source File Path', 'File path', 'Source File']
+        columns = ["Filepath", "Display name", "Display Name", 'Source File Path', 'UNC', 'Source File Path', 'File path', 'Source File']
         data = []
 
         for column in columns:
@@ -195,7 +207,7 @@ class BackupChecker:
             base = os.path.basename(mhl)
 
             # match standard LTO (LTO001)
-            if re.search(r'^[A-Z0-9]{4}\d{2}\.mhl', base):
+            if re.search(r'^[A-Z\d]{4}\d{2}\.mhl', base):
 
                 if self.dual_backups:
 

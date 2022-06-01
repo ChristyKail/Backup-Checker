@@ -1,0 +1,6 @@
+.DS_Store
+.fmtsig_sounddev
+.mixpre_sounddev
+.scorpio_sounddev
+IndexerVolumeGuid
+WPSettings.dat

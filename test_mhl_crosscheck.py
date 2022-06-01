@@ -1,5 +1,5 @@
 import unittest
-from backup_checker import BackupChecker
+from mhl_crosscheck import BackupChecker
 
 
 class TestBackupChecker(unittest.TestCase):
